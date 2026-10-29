@@ -10,7 +10,7 @@ Every phase maintains distinct git commits or file backups. If a phase fails ver
 * **Commands:**
   ```powershell
   # Remove scaffolded files
-  Remove-Item -Path "C:\Users\saqib\.gemini\antigravity\scratch\xray\*.md" -Force
+  Remove-Item -Path "./*.md" -Force
   ```
 
 ### Phase 2: Core Tracer (`tracer.py`) Rollback
@@ -18,8 +18,8 @@ Every phase maintains distinct git commits or file backups. If a phase fails ver
 * **Commands:**
   ```powershell
   # Remove tracer implementation and test suite
-  Remove-Item -Path "C:\Users\saqib\.gemini\antigravity\scratch\xray\tracer.py" -Force
-  Remove-Item -Path "C:\Users\saqib\.gemini\antigravity\scratch\xray\test_tracer.py" -Force
+  Remove-Item -Path "./tracer.py" -Force
+  Remove-Item -Path "./test_tracer.py" -Force
   ```
 
 ### Phase 3: Backend API Server (`app.py`) Rollback
@@ -28,16 +28,16 @@ Every phase maintains distinct git commits or file backups. If a phase fails ver
   ```powershell
   # Terminate background server process if running
   Get-Process -Name "python" | Where-Object { $_.CommandLine -like "*app.py*" } | Stop-Process
-  Remove-Item -Path "C:\Users\saqib\.gemini\antigravity\scratch\xray\app.py" -Force
-  Remove-Item -Path "C:\Users\saqib\.gemini\antigravity\scratch\xray\test_app.py" -Force
+  Remove-Item -Path "./app.py" -Force
+  Remove-Item -Path "./test_app.py" -Force
   ```
 
 ### Phase 4: Static UI & Legal Pages Rollback
 * **Trigger:** UI violations detected (e.g., accidental gradient, rounded button, or emoji inclusion).
 * **Commands:**
   ```powershell
-  Remove-Item -Path "C:\Users\saqib\.gemini\antigravity\scratch\xray\static" -Recurse -Force
-  Remove-Item -Path "C:\Users\saqib\.gemini\antigravity\scratch\xray\templates" -Recurse -Force
+  Remove-Item -Path "./static" -Recurse -Force
+  Remove-Item -Path "./templates" -Recurse -Force
   ```
 
 ### Phase 5: Frontend Logic & Visualizer Rollback

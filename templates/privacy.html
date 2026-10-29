@@ -5,8 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Privacy Policy - X-Ray Runtime Inspector</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/static/css/styles.css">
 </head>
-<body>
+<body style="padding: 2rem; max-width: 800px; margin: 0 auto; color: #e6edf3; background: #0b0e14; font-family: monospace;">
     <h1>Privacy Policy</h1>
+    <p>Last Updated: October 2026</p>
+    
+    <h2>1. Overview</h2>
+    <p>X-Ray Runtime Inspector is a developer debugging tool for tracing Python algorithms and data structures.</p>
+    
+    <h2>2. Code Execution and Sandboxing</h2>
+    <p>In public and production deployments, submitted Python code is evaluated inside ephemeral, containerized sandbox environments (e.g., Judge0 CE). Neither user-submitted scripts nor execution traces are stored permanently on server disks or retained in persistent databases.</p>
+    
+    <h2>3. Data Collection</h2>
+    <p>X-Ray does not require account registration, does not collect personal identifiers, and does not use tracking cookies or third-party analytics scripts.</p>
+    
+    <h2>4. Rate Limiting and Network Security</h2>
+    <p>Volatile in-memory rate limiting is applied to prevent denial of service and free-tier quota exhaustion. Network egress from the code execution sandbox is restricted.</p>
+    
+    <p><a href="/" style="color: #58a6ff;">&larr; Return to X-Ray Visualizer</a></p>
 </body>
 </html>

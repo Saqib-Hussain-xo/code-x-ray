@@ -11,8 +11,17 @@ Features:
 """
 
 import os
+import time
+from collections import defaultdict
 from flask import Flask, jsonify, render_template, request, send_from_directory
 from tracer import ExecutionTracer
+from sandbox_adapter import (
+    Judge0SandboxAdapter,
+    SandboxConfigurationError,
+    SandboxExecutionError,
+    SandboxRateLimitError,
+    SandboxTimeoutError
+)
 
 # Initialize Flask application with explicit template and static folder configurations
 app = Flask(
@@ -27,6 +36,26 @@ app.config["MAX_CONTENT_LENGTH"] = 128 * 1024
 # Safety constants for request processing
 MAX_CODE_CHARS = 10000
 APP_VERSION = "1.0.0"
+
+# Sliding-window rate limiter (20 requests per 60 seconds per IP)
+RATE_LIMIT_WINDOW = 60
+RATE_LIMIT_MAX_REQUESTS = 20
+_client_request_history = defaultdict(list)
+
+
+def is_rate_limited(client_ip: str) -> bool:
+    """
+    Check if a client IP has exceeded the allowed request frequency.
+    """
+    now = time.monotonic()
+    history = _client_request_history[client_ip]
+    # Prune timestamps older than window
+    active_history = [t for t in history if now - t < RATE_LIMIT_WINDOW]
+    _client_request_history[client_ip] = active_history
+    if len(active_history) >= RATE_LIMIT_MAX_REQUESTS:
+        return True
+    active_history.append(now)
+    return False
 
 
 @app.errorhandler(413)
@@ -56,9 +85,11 @@ def health_check():
     Service health check endpoint.
     Returns status: healthy and current service version.
     """
+    execution_mode = os.environ.get("XRAY_EXECUTION_MODE", "sandbox").lower()
     return jsonify({
         "status": "healthy",
-        "version": APP_VERSION
+        "version": APP_VERSION,
+        "execution_mode": execution_mode
     }), 200
 
 
@@ -67,8 +98,16 @@ def trace_code():
     """
     Runtime code interception endpoint.
     Accepts JSON body: {"code": "..."}
-    Executes Python code inside isolated tracer sandbox and returns step history.
+    Routes execution to an isolated sandbox environment or strictly verified local mode.
+    Guarantees fail-closed security: never falls back to in-process execution on sandbox failure.
     """
+    # Enforce per-client rate limit
+    client_ip = request.remote_addr or "127.0.0.1"
+    if is_rate_limited(client_ip):
+        return jsonify({
+            "error": "Rate limit exceeded. Maximum 20 requests per minute permitted."
+        }), 429
+
     # Parse incoming JSON payload safely
     payload = request.get_json(silent=True)
     if not payload or not isinstance(payload, dict):
@@ -87,17 +126,57 @@ def trace_code():
             "error": f"Field 'code' exceeds maximum limit of {MAX_CODE_CHARS} characters."
         }), 400
 
-    # Instantiate deterministic tracer engine
-    tracer = ExecutionTracer(max_steps=1000, max_seconds=2.0)
+    exec_mode = os.environ.get("XRAY_EXECUTION_MODE", "sandbox").lower()
+    allow_local = os.environ.get("XRAY_ALLOW_LOCAL_EXEC", "false").lower() == "true"
 
-    try:
-        result = tracer.run_trace(code_str)
-    except Exception as unexpected_err:
-        # Catch unexpected tracer boundary errors
-        return jsonify({
-            "error": "Internal tracer execution failed.",
-            "message": str(unexpected_err)
-        }), 500
+    if exec_mode == "local":
+        # Local execution is strictly gated behind explicit authorization
+        if not allow_local:
+            return jsonify({
+                "error": "In-process execution is disabled in this environment. Set XRAY_ALLOW_LOCAL_EXEC=true for trusted local development."
+            }), 403
+
+        tracer = ExecutionTracer(max_steps=1000, max_seconds=2.0)
+        try:
+            result = tracer.run_trace(code_str)
+        except Exception as unexpected_err:
+            return jsonify({
+                "error": "Internal tracer execution failed.",
+                "message": str(unexpected_err)
+            }), 500
+    else:
+        # Sandbox mode (Production / Public default): Fail-Closed Isolation
+        sandbox = Judge0SandboxAdapter()
+        try:
+            result = sandbox.execute(code_str)
+        except SandboxConfigurationError as cfg_err:
+            return jsonify({
+                "error": "Isolated sandbox execution provider is not configured.",
+                "details": str(cfg_err),
+                "code": "SANDBOX_NOT_CONFIGURED"
+            }), 503
+        except SandboxRateLimitError as rate_err:
+            return jsonify({
+                "error": str(rate_err),
+                "code": "SANDBOX_RATE_LIMITED"
+            }), 429
+        except SandboxTimeoutError as timeout_err:
+            result = {
+                "status": "timeout",
+                "total_steps": 0,
+                "steps": [],
+                "error": {
+                    "type": "TraceTimeout",
+                    "message": str(timeout_err),
+                    "line_no": 1
+                },
+                "stdout": ""
+            }
+        except SandboxExecutionError as exec_err:
+            return jsonify({
+                "error": "Isolated sandbox execution failed.",
+                "details": str(exec_err)
+            }), 503
 
     # Syntax errors in user code are returned as structured 400 responses
     if result.get("status") == "syntax_error":

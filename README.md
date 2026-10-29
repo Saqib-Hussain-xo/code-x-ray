@@ -35,7 +35,7 @@ No heavy or third-party debugging libraries are required.
 
 1. Open a terminal and navigate to the project directory:
    ```bash
-   cd C:\Users\saqib\.gemini\antigravity\scratch\xray
+   cd code-x-ray
    ```
 
 2. Start the local Flask server:

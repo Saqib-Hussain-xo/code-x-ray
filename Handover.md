@@ -3,12 +3,12 @@
 ## 1. Project Overview
 * **Project Name:** X-Ray Execution Agent
 * **Purpose:** Deterministic Python runtime interception engine and visual execution debugger for data structures and algorithms.
-* **Workspace Path:** `C:\Users\saqib\.gemini\antigravity\scratch\xray`
+* **Workspace Path:** `./code-x-ray`
 * **Architecture:** Python backend (`sys.settrace`, AST inspection, zero external tracer dependencies, Flask API server) + Industrial Dark Grid Vanilla Frontend.
 
 ## 2. Current State
-* **Active Phase:** Release Readiness Audit, Security Audit, and In-Process Hardening Complete.
-* **Backend Status:** Core `tracer.py` engine and `app.py` server fully operational and verified. Added explicit cache prevention headers (`SEND_FILE_MAX_AGE_DEFAULT = 0`, `no-cache, no-store`). Enforced 128 KB request payload limit (`MAX_CONTENT_LENGTH`), 10,000 code character limit, 20,000 stdout character buffer limit, and 500-frame recursion limit guard.
+* **Active Phase:** Remote Sandbox Adapter, Fail-Closed Security, and Remote Repository Cleanup Complete.
+* **Backend Status:** Core `tracer.py` engine and `app.py` server fully operational and verified. Added `sandbox_adapter.py` integrating Judge0 CE containerized sandbox with fail-closed semantics (never falls back to in-process `exec()`). Enforced 128 KB request payload limit (`MAX_CONTENT_LENGTH`), 10,000 code character limit, 20 req/min client rate limiting, and 500-frame recursion limit guard.
 * **Frontend Status:** 
   * Source Script editor features unmistakable active-line amber highlighting (`#d29922` at 32% opacity with 4px left amber border) and matching synchronized gutter line styling (`border-left: 3px solid #d29922`, gold number `#ffd166`, active marker `▶`).
   * Textarea transparency guaranteed (`background: transparent !important`).
@@ -18,7 +18,7 @@
   * Memory Map highlights newly created variables (`NEW` badge, `.val-new` blue accent) distinctly from mutated variables (`2 → 3` concise transition indicators, `.val-mutated` green accent). Unchanged variables are visually quiet with `-` indicators.
   * Diwali Completion Spark Canvas (`static/js/spark.js`) triggers celebratory geometric spark particles in warm festive colors upon reaching the final step of a completed execution.
   * Responsive 2-column layout, centered sequence stage, and high-contrast transport bar preserved.
-* **Tests Status:** 35/35 tests passing across `test_tracer.py` (9 tests), `test_app.py` (9 tests), `test_presets.py` (7 category tests covering all 25 algorithms), and `test_frontend_integration.py` (10 tests). All run in ~0.31s.
+* **Tests Status:** 47/47 tests passing across `test_tracer.py` (9 tests), `test_app.py` (14 tests), `test_presets.py` (7 category tests covering all 25 algorithms), `test_frontend_integration.py` (10 tests), and `test_sandbox_adapter.py` (7 tests). All run in ~0.30s.
 
 ## 3. Completed Tasks
 * Phase 0: Defined master architecture and phased implementation plan.

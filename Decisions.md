@@ -55,8 +55,14 @@
 * **Consequences:** Local and educational usage is protected against denial-of-service, runaway memory from giant payloads/print loops, and C-stack overflow, while clear architectural guidelines prevent unsafe deployment in multi-tenant production without external sandboxing.
 
 
-## ADR-009: Non-Intrusive Canvas Spark Architecture for Execution Completion
+## ADR-010: Non-Intrusive Canvas Spark Architecture for Execution Completion
 * **Date:** 2026-10-29
 * **Decision:** Implement the Diwali celebration spark effect via a lightweight fixed HTML5 canvas (`static/js/spark.js`) with `pointer-events: none` and an auto-terminating particle animation loop.
+
+## ADR-011: Isolated Remote Sandbox Adapter with Fail-Closed Enforcement
+* **Date:** 2026-10-29
+* **Decision:** Integrate a dedicated remote sandbox adapter (`sandbox_adapter.py`) targeting Judge0 CE containerized runtimes for public code evaluation. The Flask web process defaults to sandbox mode and enforces fail-closed behavior: under no circumstances does it fall back to in-process `exec()` if the remote sandbox is unconfigured or fails. In-process execution is restricted to explicitly authorized local developer environments (`XRAY_EXECUTION_MODE=local` and `XRAY_ALLOW_LOCAL_EXEC=true`).
+* **Context:** Public exposure of arbitrary Python code execution requires strict OS and container isolation. Self-contained execution runner scripts embed the standard-library tracer and return delimited JSON to the web tier. Sliding-window rate limiting (20 req/min/IP) prevents free-tier quota exhaustion.
+* **Consequences:** Safe public web tier deployment; zero host process vulnerability to arbitrary code execution; complete preservation of the existing frontend trace JSON schema.
 * **Context:** Successful algorithm completion requires celebratory feedback while strictly adhering to industrial tool performance and accessibility standards.
 * **Consequences:** Zero UI click interference; stops instantly on manual scrub, clear, or step back; automatically halts animation loops when particles decay (~2.5s) to prevent memory or CPU leaks; respects `prefers-reduced-motion`.
