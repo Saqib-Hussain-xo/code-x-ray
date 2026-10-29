@@ -58,11 +58,17 @@
 ## ADR-010: Non-Intrusive Canvas Spark Architecture for Execution Completion
 * **Date:** 2026-10-29
 * **Decision:** Implement the Diwali celebration spark effect via a lightweight fixed HTML5 canvas (`static/js/spark.js`) with `pointer-events: none` and an auto-terminating particle animation loop.
+* **Context:** Successful algorithm completion requires celebratory feedback while strictly adhering to industrial tool performance and accessibility standards.
+* **Consequences:** Zero UI click interference; stops instantly on manual scrub, clear, or step back; automatically halts animation loops when particles decay (~2.5s) to prevent memory or CPU leaks; respects `prefers-reduced-motion`.
 
 ## ADR-011: Isolated Remote Sandbox Adapter with Fail-Closed Enforcement
 * **Date:** 2026-10-29
 * **Decision:** Integrate a dedicated remote sandbox adapter (`sandbox_adapter.py`) targeting Judge0 CE containerized runtimes for public code evaluation. The Flask web process defaults to sandbox mode and enforces fail-closed behavior: under no circumstances does it fall back to in-process `exec()` if the remote sandbox is unconfigured or fails. In-process execution is restricted to explicitly authorized local developer environments (`XRAY_EXECUTION_MODE=local` and `XRAY_ALLOW_LOCAL_EXEC=true`).
 * **Context:** Public exposure of arbitrary Python code execution requires strict OS and container isolation. Self-contained execution runner scripts embed the standard-library tracer and return delimited JSON to the web tier. Sliding-window rate limiting (20 req/min/IP) prevents free-tier quota exhaustion.
 * **Consequences:** Safe public web tier deployment; zero host process vulnerability to arbitrary code execution; complete preservation of the existing frontend trace JSON schema.
-* **Context:** Successful algorithm completion requires celebratory feedback while strictly adhering to industrial tool performance and accessibility standards.
-* **Consequences:** Zero UI click interference; stops instantly on manual scrub, clear, or step back; automatically halts animation loops when particles decay (~2.5s) to prevent memory or CPU leaks; respects `prefers-reduced-motion`.
+
+## ADR-012: Vercel Serverless Deployment with Allowlisted Preset Execution
+* **Date:** 2026-10-29
+* **Decision:** Deploy the application as a single Vercel project combining the static frontend and Python serverless API (`api/index.py` via `vercel.json`). Restrict execution strictly to a canonical backend allowlist of 25 pre-approved algorithms (`presets_data.py`). Submitting arbitrary Python code is explicitly rejected with HTTP 400 (`ARBITRARY_CODE_EXECUTION_DISABLED`). Trusted preset code is traced directly via in-process `tracer.py`.
+* **Context:** Free-tier multi-service deployments (e.g. Vercel frontend + Render backend) suffer from 50 to 90 second spin-up cold starts, cross-origin preflight overhead, and external code execution API rate limits (e.g. Judge0 free tiers). For demonstration and educational showcase purposes, hosting frontend and API on the same Vercel origin provides instant sub-second responses, zero infrastructure cost, and absolute security against remote code execution because the server only executes frozen, vetted algorithm code.
+* **Consequences:** Single repository and single Vercel deployment; instant zero-cold-start execution; 100% immune to arbitrary code injection; frontend editor functions in read-only mode with clear preset runner branding; all visual debugging, memory diffs, pointer bindings, step scrubbing, playback, and Diwali animations function identically to previous iterations. Remote sandbox adapter (`sandbox_adapter.py`) and Render manifests (`render.yaml`, `Procfile`) remain preserved in the codebase as inactive reference assets for future multi-tenant sandbox upgrades.

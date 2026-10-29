@@ -24,6 +24,9 @@ def load_presets_from_js():
     return {k: v for k, v in matches}
 
 
+from presets_data import ALGORITHM_PRESETS, ALLOWED_PRESET_IDS
+
+
 class TestAlgorithmPresets(unittest.TestCase):
     """Verifies runtime behavior of all pre-loaded algorithm presets."""
 
@@ -33,8 +36,10 @@ class TestAlgorithmPresets(unittest.TestCase):
         cls.tracer = ExecutionTracer(max_steps=1000, max_seconds=2.0)
 
     def test_preset_count(self):
-        """Verify exactly 25 presets are defined in presets.js."""
+        """Verify exactly 25 presets are defined in presets.js and presets_data.py."""
         self.assertEqual(len(self.presets), 25, f"Expected 25 presets, found {len(self.presets)}")
+        self.assertEqual(len(ALGORITHM_PRESETS), 25, f"Expected 25 backend presets, found {len(ALGORITHM_PRESETS)}")
+        self.assertEqual(set(self.presets.keys()), ALLOWED_PRESET_IDS, "Frontend and backend preset IDs must match 1:1")
 
     def test_two_pointers_category(self):
         """Verify the 6 Two Pointers algorithms."""

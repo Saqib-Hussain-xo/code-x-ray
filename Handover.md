@@ -7,18 +7,23 @@
 * **Architecture:** Python backend (`sys.settrace`, AST inspection, zero external tracer dependencies, Flask API server) + Industrial Dark Grid Vanilla Frontend.
 
 ## 2. Current State
-* **Active Phase:** Remote Sandbox Adapter, Fail-Closed Security, and Remote Repository Cleanup Complete.
-* **Backend Status:** Core `tracer.py` engine and `app.py` server fully operational and verified. Added `sandbox_adapter.py` integrating Judge0 CE containerized sandbox with fail-closed semantics (never falls back to in-process `exec()`). Enforced 128 KB request payload limit (`MAX_CONTENT_LENGTH`), 10,000 code character limit, 20 req/min client rate limiting, and 500-frame recursion limit guard.
+* **Active Phase:** Single Vercel Serverless Deployment with 25-Preset Allowlist Execution Complete.
+* **Backend Status:** Core `tracer.py` engine and Flask API adapted for Vercel serverless execution via `api/index.py` and `vercel.json`. Enforces a strict server-side allowlist (`presets_data.py`) containing the 25 canonical DSA algorithm presets. Arbitrary Python code execution is rejected with HTTP 400 (`ARBITRARY_CODE_EXECUTION_DISABLED`). Trusted preset code executes in-process safely in under 0.05s. Inactive fallback assets (`sandbox_adapter.py`, `render.yaml`, `Procfile`) are preserved intact for future sandbox environments.
 * **Frontend Status:** 
-  * Source Script editor features unmistakable active-line amber highlighting (`#d29922` at 32% opacity with 4px left amber border) and matching synchronized gutter line styling (`border-left: 3px solid #d29922`, gold number `#ffd166`, active marker `▶`).
+  * Header badge updated to `PRESET RUNNER // 25 DSA ALGORITHMS`.
+  * Source Script editor `<textarea id="code-input">` configured as read-only, preventing unintended keystrokes while keeping text selection and copying enabled.
+  * Preserved unmistakable active-line amber highlighting (`#d29922` at 32% opacity with 4px left amber border) and synchronized gutter line styling (`border-left: 3px solid #d29922`, gold number `#ffd166`, active marker `▶`).
   * Textarea transparency guaranteed (`background: transparent !important`).
-  * Resolved scroll offset desynchronization by strictly sequencing `syncEditorScroll()` after `codeInput.scrollTop` updates.
-  * Resolved line number drift by transmitting verbatim untrimmed code to preserve exact 1-based line mappings.
-  * Asset cache-busting version parameters (`?v=1.1.0`) applied across templates.
+  * Scroll offset synchronization and 1-based line alignment verified.
   * Memory Map highlights newly created variables (`NEW` badge, `.val-new` blue accent) distinctly from mutated variables (`2 → 3` concise transition indicators, `.val-mutated` green accent). Unchanged variables are visually quiet with `-` indicators.
-  * Diwali Completion Spark Canvas (`static/js/spark.js`) triggers celebratory geometric spark particles in warm festive colors upon reaching the final step of a completed execution.
+  * Diwali Completion Spark Canvas (`static/js/spark.js`) triggers celebratory geometric spark particles upon reaching the final step of a completed preset execution.
   * Responsive 2-column layout, centered sequence stage, and high-contrast transport bar preserved.
-* **Tests Status:** 47/47 tests passing across `test_tracer.py` (9 tests), `test_app.py` (14 tests), `test_presets.py` (7 category tests covering all 25 algorithms), `test_frontend_integration.py` (10 tests), and `test_sandbox_adapter.py` (7 tests). All run in ~0.30s.
+* **Tests Status:** 44/44 tests passing cleanly in ~0.35s across:
+  * `test_app.py` (11 tests: health check, preset listing, single preset trace, all 25 presets execution, arbitrary code rejection, unknown preset rejection, invalid payload, oversized payload 413, rate limit 429, template routes, favicon).
+  * `test_presets.py` (7 tests verifying 1:1 match between `presets.js` and `presets_data.py` across all 6 categories).
+  * `test_frontend_integration.py` (10 tests: layout, editor gutter, console height, sequence stage centering, playback timers, memory map diffs, spark canvas).
+  * `test_sandbox_adapter.py` (7 tests: standalone unit tests for the preserved fallback adapter).
+  * `test_tracer.py` (9 tests: execution tracing, recursion protection, timeout, step limits, stdout capture, and truncation).
 
 ## 3. Completed Tasks
 * Phase 0: Defined master architecture and phased implementation plan.
@@ -46,14 +51,24 @@
   * Created initial Git checkpoint commit `6d19874`.
   * Conducted comprehensive security audit of Python execution engine across 11 threat vectors.
   * Applied safe in-process hardening (Flask `MAX_CONTENT_LENGTH` 128 KB, 10,000 code char limit, 20,000 stdout char buffer limit, 500-frame recursion guard, sanitized error responses).
-  * Added 4 new automated security regression tests (35 total passing tests).
+  * Added automated security regression tests.
   * Authored complete project `README.md` and updated architecture decisions (`ADR-009`).
+* Vercel Serverless Migration Phase:
+  * Created `presets_data.py` containing canonical backend allowlist of 25 algorithms matching `presets.js` exactly.
+  * Created `api/index.py` serverless function entrypoint and `vercel.json` routing configuration.
+  * Configured `app.py` `/api/trace` to accept `preset_id`, reject arbitrary code, and run trusted preset code in-process.
+  * Added `/api/presets` endpoint returning metadata for all 25 allowlisted presets.
+  * Configured frontend editor as read-only with preset runner badge in `templates/index.html` and `static/js/app.js`.
+  * Updated test suite (`test_app.py`, `test_presets.py`) confirming all 25 presets execute cleanly and arbitrary code is blocked.
+  * Verified all 44 automated tests pass in ~0.35s.
 
 ## 4. In-Progress Items
-* All requested deliverables completed and verified.
+* Awaiting user review before staging and committing changes to `origin/xray-only`.
 
 ## 5. Next Steps
-* Project is fully release-ready for local developer usage, demonstrations, and educational environments.
+* Stage and commit changes with commit message: `feat: vercel serverless deployment and 25-preset allowlist execution`.
+* Push branch `xray-only` to GitHub (`https://github.com/Saqib-Hussain-xo/code-x-ray`).
+* Connect repository to Vercel for single-click deployment.
 
 ## 6. Known Issues & Risks
-* In-Process Execution Boundary: The tracer uses in-process Python `exec()`. Per `README.md` and `Decisions.md` (ADR-009), the service is strictly intended for local development and isolated educational environments. Multi-tenant public deployment requires an OS-level sandbox container (gVisor/nsjail/Firecracker).
+* In-Process Execution Boundary: In-process execution is strictly limited to the 25 vetted presets in `presets_data.py`. Arbitrary user-submitted code is disabled by design. If arbitrary code execution is re-introduced in the future, the preserved `sandbox_adapter.py` must be used with an external containerized sandbox (e.g. Judge0).

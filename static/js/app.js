@@ -213,14 +213,18 @@
         });
     }
 
-    // 5. Run & Trace API Client
+    // 5. Run & Trace API Client (Preset Only)
     async function runTrace() {
         if (isTracing) return;
-        // Do not trim leading lines from source to avoid shifting 1-based line numbers
+        const presetId = presetSelect ? presetSelect.value : "";
         const rawCode = codeInput ? codeInput.value : "";
 
-        if (!rawCode.trim()) {
-            updateStatus("INPUT EMPTY // ENTER CODE", "status-error");
+        if (!presetId || !rawCode.trim()) {
+            updateStatus("SELECT PRESET // CHOOSE ALGORITHM", "status-error");
+            if (consoleOutput) {
+                consoleOutput.textContent = "Please select an algorithm preset from the dropdown menu above to trace.\n";
+                consoleOutput.classList.remove("console-empty");
+            }
             return;
         }
 
@@ -239,23 +243,20 @@
                 headers: {
                     "Content-Type": "application/json"
                 },
-                body: JSON.stringify({ code: rawCode })
+                body: JSON.stringify({ preset_id: presetId })
             });
 
             const data = await response.json();
 
-            // Handle syntax errors or HTTP 400 responses
+            // Handle errors or HTTP non-200 responses
             if (!response.ok || data.status === "syntax_error") {
                 resetTraceVisuals();
-                const err = data.error || {};
-                const lineInfo = err.line_no ? ` (line ${err.line_no})` : "";
-                const msg = `${err.type || "SyntaxError"}: ${err.message || "Invalid syntax"}${lineInfo}\n`;
-
+                const errMsg = typeof data.error === "string" ? data.error : (data.error && data.error.message ? data.error.message : "Execution failed");
                 if (consoleOutput) {
-                    consoleOutput.textContent = msg;
+                    consoleOutput.textContent = `Error: ${errMsg}\n`;
                     consoleOutput.classList.remove("console-empty");
                 }
-                updateStatus(`SYNTAX ERROR // LINE ${err.line_no || 1}`, "status-error");
+                updateStatus("EXECUTION ERROR // CHECK CONSOLE", "status-error");
                 return;
             }
 
@@ -925,6 +926,9 @@
 
     // 10. Initialization with robust readyState check
     function init() {
+        if (codeInput) {
+            codeInput.readOnly = true;
+        }
         initPresets();
         initEvents();
         updateEditorGutter();

@@ -8,15 +8,39 @@ X-Ray steps through Python execution line by line, capturing variable snapshots,
 
 ## Architecture Overview
 
-* **Runtime Interception Engine (`tracer.py`)**: Uses Python's native `sys.settrace` frame hooks and AST parsing to capture execution snapshots without external debugging dependencies.
-* **Backend Application Server (`app.py`)**: Lightweight Flask HTTP service providing `/api/trace` and `/api/health` endpoints with structured error handling.
+* **Serverless Entrypoint (`api/index.py` & `vercel.json`)**: Configured for single-project deployment on Vercel. Directs web traffic to the unified Flask application runtime.
+* **Canonical Preset Allowlist (`presets_data.py`)**: Backend allowlist containing all 25 canonical DSA algorithm presets. Guarantees that only vetted, trusted code can execute on the server.
+* **Runtime Interception Engine (`tracer.py`)**: Uses Python's native `sys.settrace` frame hooks, AST parsing, and stdout redirection to capture deterministic execution snapshots in under 0.05 seconds.
+* **Backend Application Server (`app.py`)**: Lightweight Flask HTTP service providing `/api/trace`, `/api/presets`, and `/api/health` endpoints with strict input validation and structured error responses.
 * **Frontend Interface (`templates/index.html`, `static/css/styles.css`, `static/js/app.js`)**: Industrial dark-grid developer interface with synchronized code editor, memory map, sequence and pointer stage, console, and playback transport bar.
-* **Preset Library (`static/js/presets.js`)**: 25 pre-configured algorithmic examples across 6 categories.
 * **Celebration Canvas (`static/js/spark.js`)**: Canvas-based particle burst animation celebrating successful algorithm execution completion.
+* **Preserved Fallback Sandbox Adapter (`sandbox_adapter.py`)**: Isolated Judge0 CE adapter kept intact for future sandbox environments if arbitrary user execution is re-enabled.
 
 ---
 
-## Prerequisites
+## Deployment to Vercel
+
+The project is structured for single-repository, zero-config deployment on Vercel.
+
+### Option 1: Deploy from GitHub (Recommended)
+
+1. Push this repository to your GitHub account (branch `xray-only` or `main`).
+2. Log in to [Vercel](https://vercel.com) and click **Add New Project**.
+3. Import the repository.
+4. Keep all default project settings:
+   * **Framework Preset:** Other
+   * **Root Directory:** `./`
+   * **Build Command:** None
+   * **Output Directory:** None
+5. Click **Deploy**.
+
+Vercel automatically detects `vercel.json` and configures the Python serverless runtime at `api/index.py`. The frontend and API are served from the same domain, eliminating cross-origin preflight requests and avoiding any free-tier spin-up sleep delays.
+
+---
+
+## Local Development & Startup
+
+### Prerequisites
 
 * Python 3.10 or newer (tested with Python 3.14).
 * Pip package manager.
@@ -29,16 +53,14 @@ pip install flask
 
 No heavy or third-party debugging libraries are required.
 
----
-
-## Local Startup
+### Local Startup
 
 1. Open a terminal and navigate to the project directory:
    ```bash
    cd code-x-ray
    ```
 
-2. Start the local Flask server:
+2. Start the local server:
    ```bash
    python app.py
    ```
@@ -63,11 +85,12 @@ Run the complete regression test suite using Python's standard `unittest` runner
 python -m unittest discover -v
 ```
 
-The test suite covers:
-* `test_tracer.py`: Runtime tracing, dual loop kill switches (steps and timeout), pointer heuristics, sequence extraction, stdout capture, stdout truncation, and recursion depth protection.
-* `test_app.py`: Health checks, trace execution, payload validation, code character limits, 128 KB request size limits, template rendering, and SVG favicon delivery.
-* `test_presets.py`: Completeness and validity of all 25 algorithm presets across 6 categories.
+The test suite covers 44 automated tests:
+* `test_app.py`: Health checks, preset execution, arbitrary code rejection, unknown preset rejection, 128 KB request size limits, template rendering, and SVG favicon delivery.
+* `test_presets.py`: 1:1 schema and content verification between frontend `presets.js` and backend `presets_data.py` across all 25 algorithms.
+* `test_tracer.py`: Runtime tracing, dual loop kill switches (step limit and wall-clock timeout), pointer heuristics, sequence extraction, stdout capture, stdout truncation, and recursion depth protection.
 * `test_frontend_integration.py`: Frontend contracts, editor gutter styling, high-contrast active-line highlight, 2-column grid layout, auto-playback mechanics, and Diwali celebration canvas scripts.
+* `test_sandbox_adapter.py`: Standalone unit tests verifying the preserved fallback sandbox adapter.
 
 ---
 
@@ -82,8 +105,8 @@ Select from 25 algorithms grouped into 6 categories:
 * **Matrices**: Matrix Transpose, Spiral Matrix, Set Matrix Zeroes, Rotate Image.
 * **Stacks, Queues, and Recursion**: Valid Parentheses, Monotonic Daily Temperatures, Min Stack, Factorial, Fibonacci (Memoized).
 
-### 2. Editor & Code Tracing
-* Write custom Python algorithmic code or load presets.
+### 2. Preset Runner & Code Tracing
+* Select any algorithm from the dropdown. The source code loads automatically into the editor.
 * Click **Run & Trace** (or press `Ctrl+Enter`) to intercept and trace execution.
 * The editor features an amber active-line marker (`#d29922`) with synchronized gutter line tracking.
 * Click **Clear** to reset the editor and memory stage.
@@ -91,42 +114,27 @@ Select from 25 algorithms grouped into 6 categories:
 ### 3. Visual Debugging Panels
 * **Memory Map**: Displays local variables with clear diff indicators:
   * Newly created variables are highlighted with a `NEW` badge.
-  * Mutated variables show value transitions (`prev → curr`).
+  * Mutated variables show value transitions (`prev -> curr`).
   * Unchanged variables remain visually muted.
-* **Sequence & Pointer Stage**: Automatically detects 1D/2D arrays and binds pointer indices (`left`, `right`, `i`, `j`, `mid`) directly to active visual cells.
+* **Sequence & Pointer Stage**: Automatically detects 1D and 2D arrays and binds pointer indices (`left`, `right`, `i`, `j`, `mid`) directly to active visual cells.
 * **Console Output**: Live incremental standard output capture from `print()` statements.
 * **Transport Controls**: Jump to First Step, Step Back, Play/Pause, Step Forward, Jump to Last Step, and adjustable playback speed slider (0.25x to 4.0x).
 
 ---
 
-## Security Architecture & Sandboxing Limitations
+## Security Architecture
 
-> [!WARNING]
-> **LOCAL DEVELOPMENT AND ISOLATED EDUCATIONAL USE ONLY.**
-> This application executes user-submitted Python code using Python's built-in `exec()`. It MUST NOT be exposed directly to untrusted public networks or multi-tenant hosting environments without an external isolation sandbox.
+### Public Demo: Server-Side Allowlist Model
 
-### Built-in In-Process Protections
+To ensure absolute security when deployed publicly on Vercel without requiring external sandbox containers or third-party API quotas:
 
-The application enforces several in-process safeguards:
-1. **Request Payload Limit**: Flask `MAX_CONTENT_LENGTH` is enforced at `128 KB` to prevent oversized body attacks.
-2. **Code Length Validation**: Code input is capped at `10,000 characters` (~250-300 lines of algorithmic code).
-3. **Execution Step Limit**: Strict limit of `1,000 steps` prevents infinite loops.
-4. **Wall-Clock Execution Timeout**: Hard cutoff at `2.0 seconds` prevents CPU hogging.
-5. **Stdout Buffer Truncation**: Standard output is capped at `20,000 characters` to prevent memory exhaustion from runaway print statements.
-6. **Bounded Recursion Limit**: Recursion limit is bounded to `500 frames` during trace execution to protect the C stack.
+1. **Allowlist Enforcement**: The backend only executes code associated with a valid `preset_id` from the canonical allowlist (`presets_data.py`).
+2. **Arbitrary Code Disabled**: Submissions containing arbitrary Python code without a recognized `preset_id` are rejected immediately with HTTP 400 (`ARBITRARY_CODE_EXECUTION_DISABLED`).
+3. **Zero Untrusted Execution**: Because the server never compiles or executes untrusted strings from user requests, remote code execution (RCE) vulnerabilities are completely eliminated by design.
+4. **Read-Only Preset Runner**: The frontend editor is configured in read-only mode with a clear `PRESET RUNNER // 25 DSA ALGORITHMS` badge, giving users full freedom to inspect and trace all 25 algorithms without risk of execution faults.
 
-### Inherent In-Process Sandboxing Limitations
+### Multi-Tenant Arbitrary Execution (Future Upgrade Path)
 
-Because code execution occurs within the parent Python process:
-* **No Syscall or OS Isolation**: Python's `exec()` can invoke `__import__('os')` or `__import__('subprocess')` to interact with the underlying host OS.
-* **Filesystem and Environment Exposure**: User code runs with the file system permissions and environment variables of the running server process.
-* **Network Access**: Sockets and HTTP connections are not blocked by `sys.settrace`.
-* **C-Extension Blocking**: Calls to blocking C functions (e.g. `time.sleep()`, catastrophic regular expressions) cannot be interrupted by `sys.settrace` until control returns to Python bytecode.
-
-### Requirements for Multi-Tenant Public Deployment
-
-To safely run this service in a production or public multi-tenant environment, the execution tier must be separated from the web tier and executed inside an isolated sandbox runtime:
-* **Linux Namespaces / `nsjail` / `seccomp`**: Restrict syscalls, filesystem mounts (read-only root, no `/proc`), network access (disabled), and CPU/memory quotas.
-* **gVisor (`runsc`)**: Run execution workers inside a user-space kernel sandbox intercepting all syscalls.
-* **MicroVM Isolation (Firecracker / AWS Lambda)**: Execute each trace in an isolated, ephemeral microVM destroyed immediately upon completion.
-* **Worker Process Segregation**: Run trace jobs in a non-root, unprivileged subprocess pool over a job queue rather than directly inside the Flask request handler thread.
+If arbitrary user code execution is re-introduced in a future phase:
+* The preserved `sandbox_adapter.py` should be configured with a remote containerized sandbox (such as Judge0 CE or nsjail).
+* The web server must enforce fail-closed security, never executing arbitrary user code in-process on the web worker.

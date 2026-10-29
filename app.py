@@ -15,26 +15,22 @@ import time
 from collections import defaultdict
 from flask import Flask, jsonify, render_template, request, send_from_directory
 from tracer import ExecutionTracer
-from sandbox_adapter import (
-    Judge0SandboxAdapter,
-    SandboxConfigurationError,
-    SandboxExecutionError,
-    SandboxRateLimitError,
-    SandboxTimeoutError
-)
+from presets_data import ALGORITHM_PRESETS, ALLOWED_PRESET_IDS
+
+# Resolve absolute paths for Vercel serverless environment compatibility
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Initialize Flask application with explicit template and static folder configurations
 app = Flask(
     __name__,
-    template_folder="templates",
-    static_folder="static"
+    template_folder=os.path.join(BASE_DIR, "templates"),
+    static_folder=os.path.join(BASE_DIR, "static")
 )
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 # Request payload safety limit: 128 KB
 app.config["MAX_CONTENT_LENGTH"] = 128 * 1024
 
-# Safety constants for request processing
-MAX_CODE_CHARS = 10000
+# Application metadata
 APP_VERSION = "1.0.0"
 
 # Sliding-window rate limiter (20 requests per 60 seconds per IP)
@@ -87,13 +83,32 @@ def add_no_cache_headers(response):
 def health_check():
     """
     Service health check endpoint.
-    Returns status: healthy and current service version.
+    Returns status: healthy, version, and preset execution capability.
     """
-    execution_mode = os.environ.get("XRAY_EXECUTION_MODE", "sandbox").lower()
     return jsonify({
         "status": "healthy",
         "version": APP_VERSION,
-        "execution_mode": execution_mode
+        "execution_mode": "preset_only",
+        "total_presets": len(ALGORITHM_PRESETS)
+    }), 200
+
+
+@app.route("/api/presets", methods=["GET"])
+def list_presets():
+    """
+    Returns the metadata of all 25 pre-approved algorithms in the allowlist.
+    """
+    summary = [
+        {
+            "id": p["id"],
+            "title": p["title"],
+            "category": p["category"]
+        }
+        for p in ALGORITHM_PRESETS.values()
+    ]
+    return jsonify({
+        "presets": summary,
+        "total": len(summary)
     }), 200
 
 
@@ -101,94 +116,68 @@ def health_check():
 def trace_code():
     """
     Runtime code interception endpoint.
-    Accepts JSON body: {"code": "..."}
-    Routes execution to an isolated sandbox environment or strictly verified local mode.
-    Guarantees fail-closed security: never falls back to in-process execution on sandbox failure.
+    Accepts JSON body: {"preset_id": "..."}
+    Strictly restricted to the 25 pre-approved algorithm presets.
+    Arbitrary user-submitted Python code is rejected for security.
     """
     if request.method == "OPTIONS":
         return ("", 204)
-    # Enforce per-client rate limit
-    client_ip = request.remote_addr or "127.0.0.1"
-    if is_rate_limited(client_ip):
-        return jsonify({
-            "error": "Rate limit exceeded. Maximum 20 requests per minute permitted."
-        }), 429
+
+    # Enforce per-client rate limit (disabled during automated test runner)
+    if not app.config.get("TESTING", False):
+        client_ip = request.remote_addr or "127.0.0.1"
+        if is_rate_limited(client_ip):
+            return jsonify({
+                "error": "Rate limit exceeded. Maximum 20 requests per minute permitted."
+            }), 429
 
     # Parse incoming JSON payload safely
     payload = request.get_json(silent=True)
     if not payload or not isinstance(payload, dict):
         return jsonify({
-            "error": "Invalid request payload. Expected JSON object with a 'code' field."
+            "error": "Invalid request payload. Expected JSON object with a 'preset_id' field."
         }), 400
 
-    code_str = payload.get("code")
-    if code_str is None or not isinstance(code_str, str):
+    # Explicit rejection of arbitrary code submissions
+    if "code" in payload and "preset_id" not in payload:
         return jsonify({
-            "error": "Field 'code' must be a valid string."
+            "error": "Arbitrary code execution is disabled in this demo. Please provide a valid 'preset_id' from the 25 supported presets.",
+            "code": "ARBITRARY_CODE_EXECUTION_DISABLED",
+            "allowed_presets": list(ALGORITHM_PRESETS.keys())
         }), 400
 
-    if len(code_str) > MAX_CODE_CHARS:
+    preset_id = payload.get("preset_id")
+    if not preset_id or not isinstance(preset_id, str):
         return jsonify({
-            "error": f"Field 'code' exceeds maximum limit of {MAX_CODE_CHARS} characters."
+            "error": "Field 'preset_id' must be a valid string identifier.",
+            "allowed_presets": list(ALGORITHM_PRESETS.keys())
         }), 400
 
-    exec_mode = os.environ.get("XRAY_EXECUTION_MODE", "sandbox").lower()
-    allow_local = os.environ.get("XRAY_ALLOW_LOCAL_EXEC", "false").lower() == "true"
+    if preset_id not in ALGORITHM_PRESETS:
+        return jsonify({
+            "error": f"Unknown preset_id: '{preset_id}'. Only the 25 predefined algorithmic presets are supported.",
+            "allowed_presets": list(ALGORITHM_PRESETS.keys())
+        }), 400
 
-    if exec_mode == "local":
-        # Local execution is strictly gated behind explicit authorization
-        if not allow_local:
-            return jsonify({
-                "error": "In-process execution is disabled in this environment. Set XRAY_ALLOW_LOCAL_EXEC=true for trusted local development."
-            }), 403
+    # Retrieve vetted, trusted Python code from backend allowlist
+    trusted_code = ALGORITHM_PRESETS[preset_id]["code"]
 
-        tracer = ExecutionTracer(max_steps=1000, max_seconds=2.0)
-        try:
-            result = tracer.run_trace(code_str)
-        except Exception as unexpected_err:
-            return jsonify({
-                "error": "Internal tracer execution failed.",
-                "message": str(unexpected_err)
-            }), 500
-    else:
-        # Sandbox mode (Production / Public default): Fail-Closed Isolation
-        sandbox = Judge0SandboxAdapter()
-        try:
-            result = sandbox.execute(code_str)
-        except SandboxConfigurationError as cfg_err:
-            return jsonify({
-                "error": "Isolated sandbox execution provider is not configured.",
-                "details": str(cfg_err),
-                "code": "SANDBOX_NOT_CONFIGURED"
-            }), 503
-        except SandboxRateLimitError as rate_err:
-            return jsonify({
-                "error": str(rate_err),
-                "code": "SANDBOX_RATE_LIMITED"
-            }), 429
-        except SandboxTimeoutError as timeout_err:
-            result = {
-                "status": "timeout",
-                "total_steps": 0,
-                "steps": [],
-                "error": {
-                    "type": "TraceTimeout",
-                    "message": str(timeout_err),
-                    "line_no": 1
-                },
-                "stdout": ""
-            }
-        except SandboxExecutionError as exec_err:
-            return jsonify({
-                "error": "Isolated sandbox execution failed.",
-                "details": str(exec_err)
-            }), 503
+    # Execute line-by-line deterministic tracer engine directly
+    tracer = ExecutionTracer(max_steps=1000, max_seconds=2.0)
 
-    # Syntax errors in user code are returned as structured 400 responses
+    try:
+        result = tracer.run_trace(trusted_code)
+    except Exception as unexpected_err:
+        return jsonify({
+            "error": "Internal tracer execution failed.",
+            "message": str(unexpected_err)
+        }), 500
+
+    # Syntax errors in vetted code should not occur, but return 400 defensively
     if result.get("status") == "syntax_error":
         return jsonify(result), 400
 
-    # Return execution timeline payload
+    # Return execution timeline payload matching the exact frontend schema
     try:
         return jsonify(result), 200
     except Exception as serialization_err:
