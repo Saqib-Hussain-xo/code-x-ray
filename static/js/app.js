@@ -23,6 +23,7 @@
     let isTracing = false;      // API request in-flight flag
     let currentActiveLineNo = null; // Active highlighted source line
     let hasTriggeredDiwaliThisRun = false; // Diwali animation single-fire guard
+    const API_BASE_URL = window.XRAY_API_BASE_URL || "";
 
     // 2. DOM Elements Cache
     const presetSelect = document.getElementById("preset-select");
@@ -233,7 +234,7 @@
         if (btnClear) btnClear.disabled = true;
 
         try {
-            const response = await fetch("/api/trace", {
+            const response = await fetch(`${API_BASE_URL}/api/trace`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"

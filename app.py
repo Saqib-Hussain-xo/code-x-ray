@@ -71,11 +71,15 @@ def request_entity_too_large(error):
 @app.after_request
 def add_no_cache_headers(response):
     """
-    Ensure static assets and templates are revalidated immediately by clients.
+    Ensure static assets and templates are revalidated immediately by clients,
+    and configure safe CORS headers for multi-domain frontend hosting.
     """
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return response
 
 
@@ -93,7 +97,7 @@ def health_check():
     }), 200
 
 
-@app.route("/api/trace", methods=["POST"])
+@app.route("/api/trace", methods=["POST", "OPTIONS"])
 def trace_code():
     """
     Runtime code interception endpoint.
@@ -101,6 +105,8 @@ def trace_code():
     Routes execution to an isolated sandbox environment or strictly verified local mode.
     Guarantees fail-closed security: never falls back to in-process execution on sandbox failure.
     """
+    if request.method == "OPTIONS":
+        return ("", 204)
     # Enforce per-client rate limit
     client_ip = request.remote_addr or "127.0.0.1"
     if is_rate_limited(client_ip):

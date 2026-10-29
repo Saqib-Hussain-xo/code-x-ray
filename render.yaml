@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: code-x-ray
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 30
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: XRAY_EXECUTION_MODE
+        value: sandbox
+      - key: JUDGE0_API_URL
+        value: https://judge0-ce.p.rapidapi.com
+      - key: JUDGE0_API_HOST
+        value: judge0-ce.p.rapidapi.com
+      - key: JUDGE0_API_KEY
+        sync: false
