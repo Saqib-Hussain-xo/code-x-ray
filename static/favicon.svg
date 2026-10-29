@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" fill="#0b0e14" rx="2" />
+  <rect x="1" y="1" width="30" height="30" fill="none" stroke="#242b35" stroke-width="1" rx="1" />
+  <!-- Minimal geometric X-ray crosshair icon -->
+  <line x1="7" y1="7" x2="25" y2="25" stroke="#3fb950" stroke-width="2.5" stroke-linecap="square" />
+  <line x1="25" y1="7" x2="7" y2="25" stroke="#58a6ff" stroke-width="2.5" stroke-linecap="square" />
+  <!-- Center focal aperture -->
+  <rect x="13.5" y="13.5" width="5" height="5" fill="#0b0e14" stroke="#e6edf3" stroke-width="1.5" />
+</svg>

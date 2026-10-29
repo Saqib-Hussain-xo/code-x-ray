@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>X-Ray // Runtime Inspector</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}?v=1.1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=1.1.0">
+</head>
+<body>
+    <div class="app-shell">
+        <!-- 1. Global Header -->
+        <header class="global-header">
+            <div class="header-brand">
+                <svg class="header-icon" viewBox="0 0 32 32" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="32" height="32" fill="#0b0e14" rx="2" />
+                    <rect x="1" y="1" width="30" height="30" fill="none" stroke="#242b35" stroke-width="1" rx="1" />
+                    <line x1="7" y1="7" x2="25" y2="25" stroke="#3fb950" stroke-width="2.5" stroke-linecap="square" />
+                    <line x1="25" y1="7" x2="7" y2="25" stroke="#58a6ff" stroke-width="2.5" stroke-linecap="square" />
+                    <rect x="13.5" y="13.5" width="5" height="5" fill="#0b0e14" stroke="#e6edf3" stroke-width="1.5" />
+                </svg>
+                <span class="brand-title">X-Ray // Runtime Inspector</span>
+            </div>
+            <nav class="header-nav">
+                <span class="runtime-badge">PYTHON 3</span>
+                <a href="/privacy" class="header-link">Privacy Policy</a>
+                <a href="/terms" class="header-link">Terms and Conditions</a>
+            </nav>
+        </header>
+
+        <!-- 2. Two-Column Workspace Grid -->
+        <main class="workspace-grid">
+            <!-- Left Column: Source Script (Top) and Console Output (Bottom) -->
+            <div class="workspace-column left-column">
+                <!-- Panel 1: Source Script Editor -->
+                <section class="panel panel-editor" aria-label="Source Script Editor">
+                    <div class="panel-header">
+                        <span class="panel-title">Source Script // Python</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="editor-controls">
+                            <select id="preset-select" class="preset-select" aria-label="Algorithm Preset Selector">
+                                <option value="" selected>Load Algorithm Preset...</option>
+                                <optgroup label="Two Pointers">
+                                    <option value="two_pointer_palindrome">1. Palindrome Check</option>
+                                    <option value="two_sum_sorted">2. Two Sum on Sorted Array</option>
+                                    <option value="reverse_array">3. Reverse Array</option>
+                                    <option value="remove_duplicates">4. Remove Duplicates from Sorted Array</option>
+                                    <option value="move_zeroes">5. Move Zeroes</option>
+                                    <option value="container_most_water">6. Container With Most Water</option>
+                                </optgroup>
+                                <optgroup label="Sliding Window">
+                                    <option value="max_sum_subarray">7. Maximum Sum Subarray</option>
+                                    <option value="min_length_subarray">8. Minimum-Length Subarray</option>
+                                    <option value="longest_substr_no_repeat">9. Longest Substring Without Repeating Characters</option>
+                                    <option value="fixed_window_average">10. Fixed-Size Window Average</option>
+                                </optgroup>
+                                <optgroup label="Searching and Arrays">
+                                    <option value="linear_search">11. Linear Search</option>
+                                    <option value="binary_search">12. Binary Search</option>
+                                    <option value="sentinel_search">13. Sentinel Linear Search</option>
+                                    <option value="prefix_sums">14. Prefix Sums</option>
+                                    <option value="frequency_counting">15. Frequency Counting</option>
+                                </optgroup>
+                                <optgroup label="Sorting">
+                                    <option value="bubble_sort">16. Bubble Sort</option>
+                                    <option value="selection_sort">17. Selection Sort</option>
+                                    <option value="insertion_sort">18. Insertion Sort</option>
+                                    <option value="merge_sort">19. Merge Sort</option>
+                                </optgroup>
+                                <optgroup label="Matrices">
+                                    <option value="matrix_traversal">20. Nested Matrix Traversal</option>
+                                    <option value="matrix_row_sums">21. Row Sums</option>
+                                    <option value="matrix_col_sums">22. Column Sums</option>
+                                    <option value="matrix_diagonal">23. Diagonal Traversal</option>
+                                </optgroup>
+                                <optgroup label="Stacks, Queues, and Recursion">
+                                    <option value="stack_queue_ops">24. Stack and Queue Operations</option>
+                                    <option value="factorial_fibonacci">25. Factorial and Fibonacci Recursion</option>
+                                </optgroup>
+                            </select>
+                            <button type="button" id="btn-run" class="btn btn-primary" aria-label="Run and Trace">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                    <polygon points="6 4 20 12 6 20 6 4" />
+                                </svg>
+                                <span>Run &amp; Trace</span>
+                            </button>
+                            <button type="button" id="btn-clear" class="btn btn-secondary" aria-label="Clear Code Editor">Clear</button>
+                            <span id="trace-status" class="status-badge" role="status">IDLE // AWAITING INPUT</span>
+                        </div>
+                        <div class="editor-wrapper">
+                            <div id="editor-gutter" class="editor-gutter" aria-hidden="true"></div>
+                            <div class="editor-workspace">
+                                <div id="editor-highlight-layer" class="editor-highlight-layer" aria-hidden="true">
+                                    <div id="editor-active-line" class="editor-active-line"></div>
+                                </div>
+                                <textarea id="code-input" class="code-textarea" spellcheck="false" placeholder="# Write Python code to trace, or select an algorithm preset above..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Panel 2: Console Output Panel (Directly Beneath Editor in Left Column) -->
+                <section class="panel panel-console" aria-label="Standard Output Console">
+                    <div class="panel-header">
+                        <span class="panel-title">Console Output // Stdout</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="console-wrapper">
+                            <pre class="console-pre"><code id="console-output" class="console-empty">No standard output recorded. Run a trace to view print() outputs.</code></pre>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Right Column: Memory Map (Top) and Sequence & Pointer Stage (Bottom) -->
+            <div class="workspace-column right-column">
+                <!-- Panel 3: Memory Map Panel -->
+                <section class="panel panel-memory" aria-label="Memory Map and State Diff">
+                    <div class="panel-header">
+                        <span class="panel-title">Memory Map // Local Scope</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="table-scroll-container">
+                            <table id="memory-table" class="memory-table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">VARIABLE</th>
+                                        <th scope="col">TYPE</th>
+                                        <th scope="col">CURRENT VALUE</th>
+                                        <th scope="col">PREVIOUS VALUE</th>
+                                        <th scope="col">STATUS</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="memory-table-body">
+                                    <tr>
+                                        <td colspan="5" class="table-empty-message">
+                                            No active execution frame. Execute a trace to inspect variable snapshots and mutations.
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Panel 4: Sequence & Pointer Stage (Expanded Vertical Space) -->
+                <section class="panel panel-sequence" aria-label="Sequence and Pointer Stage">
+                    <div class="panel-header">
+                        <span class="panel-title">Sequence &amp; Pointer Stage // Memory Blocks</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="stage-scroll-container">
+                            <div id="stage-empty" class="stage-empty">
+                                No active sequence detected in current scope. Initialize a list, tuple, or string with index pointers (e.g., left, right, i, j) to inspect contiguous memory cells.
+                            </div>
+                            <div id="sequences-container" class="sequences-wrapper">
+                                <!-- Populated dynamically during execution trace -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <!-- 3. Bottom Transport Bar (Spans Full Application Width) -->
+        <footer class="transport-bar" aria-label="Timeline Transport Controls">
+            <div class="transport-controls-group">
+                <button type="button" id="btn-first" class="btn-transport" title="First Step (Home)" disabled aria-label="First Step">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" xmlns="http://www.w3.org/2000/svg">
+                        <line x1="5" y1="5" x2="5" y2="19" />
+                        <polygon points="19 18 9 12 19 6 19 18" fill="currentColor" stroke="none" />
+                    </svg>
+                </button>
+                <button type="button" id="btn-prev" class="btn-transport" title="Step Back (Left Arrow)" disabled aria-label="Step Back">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                        <polygon points="18 19 8 12 18 5 18 19" />
+                    </svg>
+                </button>
+                <button type="button" id="btn-play" class="btn-transport btn-play" title="Play (Space)" disabled aria-label="Play execution">
+                    <svg id="icon-play" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                        <polygon points="7 4 19 12 7 20 7 4" />
+                    </svg>
+                </button>
+                <button type="button" id="btn-next" class="btn-transport" title="Step Forward (Right Arrow)" disabled aria-label="Step Forward">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                        <polygon points="6 5 16 12 6 19 6 5" />
+                    </svg>
+                </button>
+                <button type="button" id="btn-last" class="btn-transport" title="Last Step (End)" disabled aria-label="Last Step">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" xmlns="http://www.w3.org/2000/svg">
+                        <polygon points="5 6 15 12 5 18 5 6" fill="currentColor" stroke="none" />
+                        <line x1="19" y1="5" x2="19" y2="19" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="transport-scrubber-group">
+                <input type="range" id="timeline-scrubber" class="timeline-range" min="0" max="0" value="0" disabled aria-label="Timeline Step Scrubber">
+                <span id="step-counter" class="step-counter">STEP 0 / 0</span>
+            </div>
+
+            <div class="transport-speed-group">
+                <label for="speed-select" class="speed-label">SPEED:</label>
+                <select id="speed-select" class="speed-select" aria-label="Playback Speed">
+                    <option value="0.5">0.5x</option>
+                    <option value="1.0" selected>1.0x</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="2.0">2.0x</option>
+                </select>
+            </div>
+        </footer>
+    </div>
+    <canvas id="diwali-canvas" class="diwali-canvas" aria-hidden="true"></canvas>
+    <script src="{{ url_for('static', filename='js/presets.js') }}?v=1.1.0"></script>
+    <script src="{{ url_for('static', filename='js/spark.js') }}?v=1.1.0"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}?v=1.1.0"></script>
+</body>
+</html>
