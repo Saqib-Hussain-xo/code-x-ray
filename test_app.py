@@ -1,9 +1,9 @@
 """
-X-Ray Execution Agent: Test Suite for HTTP Backend Server (Preset-Only Architecture)
+X-Ray Execution Agent: Test Suite for HTTP Backend Server (Custom Code Playground Architecture)
 Module: test_app.py
 
-Validates API endpoints, health check metadata, preset allowlist enforcement,
-rejection of arbitrary code submissions, rate limiting, and template serving.
+Validates API endpoints, health check metadata, preset execution, custom code execution,
+real-time AST syntax validation, rate limiting, and template serving.
 """
 
 import json
@@ -28,7 +28,7 @@ class TestAppServer(unittest.TestCase):
 
     def test_health_check_endpoint(self):
         """
-        Verify GET /api/health returns 200 OK with expected JSON structure and preset_only mode.
+        Verify GET /api/health returns 200 OK with expected JSON structure and custom code capability.
         """
         response = self.client.get("/api/health")
         self.assertEqual(response.status_code, 200)
@@ -36,9 +36,9 @@ class TestAppServer(unittest.TestCase):
         data = response.get_json()
         self.assertIsNotNone(data)
         self.assertEqual(data.get("status"), "healthy")
-        self.assertEqual(data.get("version"), "1.0.0")
-        self.assertEqual(data.get("execution_mode"), "preset_only")
+        self.assertEqual(data.get("version"), "1.2.0")
         self.assertEqual(data.get("total_presets"), 25)
+        self.assertTrue(data.get("custom_code_enabled"))
 
     def test_list_presets_endpoint(self):
         """
@@ -55,6 +55,102 @@ class TestAppServer(unittest.TestCase):
         self.assertIn("two_pointer_palindrome", preset_ids)
         self.assertIn("binary_search", preset_ids)
         self.assertIn("bubble_sort", preset_ids)
+
+    def test_validate_endpoint_valid_python(self):
+        """
+        Verify POST /api/validate with valid Python code returns 200 and valid: true.
+        """
+        code = "def add(a, b):\n    return a + b\nres = add(2, 3)\n"
+        response = self.client.post(
+            "/api/validate",
+            data=json.dumps({"code": code}),
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data.get("valid"))
+
+    def test_validate_endpoint_syntax_error(self):
+        """
+        Verify POST /api/validate with syntax error returns valid: false with line and column.
+        """
+        code = "def bad_func(\n    x = 1\n"
+        response = self.client.post(
+            "/api/validate",
+            data=json.dumps({"code": code}),
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertFalse(data.get("valid"))
+        self.assertIn("error", data)
+        self.assertEqual(data["error"]["type"], "SyntaxError")
+        self.assertGreaterEqual(data["error"]["line_no"], 1)
+        self.assertGreaterEqual(data["error"]["offset"], 1)
+
+    def test_validate_endpoint_empty_code(self):
+        """
+        Verify POST /api/validate with empty code returns 400 with ValidationError.
+        """
+        response = self.client.post(
+            "/api/validate",
+            data=json.dumps({"code": "   "}),
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertFalse(data.get("valid"))
+        self.assertEqual(data["error"]["type"], "ValidationError")
+
+    def test_trace_custom_code_execution(self):
+        """
+        Verify POST /api/trace with custom code executes and returns populated trace timeline.
+        """
+        custom_code = (
+            "nums = [3, 1, 2]\n"
+            "nums.sort()\n"
+            "print('Sorted:', nums)\n"
+        )
+        response = self.client.post(
+            "/api/trace",
+            data=json.dumps({"code": custom_code}),
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data.get("status"), "completed")
+        self.assertIsInstance(data.get("steps"), list)
+        self.assertGreater(len(data["steps"]), 0)
+        self.assertIn("nums", data["steps"][-1]["locals_snapshot"])
+        self.assertIn("Sorted:", data["stdout"])
+
+    def test_trace_custom_code_syntax_error_returns_400(self):
+        """
+        Verify POST /api/trace with syntax error in custom code returns 400 Bad Request.
+        """
+        response = self.client.post(
+            "/api/trace",
+            data=json.dumps({"code": "def incomplete(\n"}),
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertEqual(data.get("status"), "syntax_error")
+        self.assertIn("error", data)
+        self.assertEqual(data["error"]["type"], "SyntaxError")
+
+    def test_trace_custom_code_empty_returns_400(self):
+        """
+        Verify POST /api/trace with empty code returns 400 Bad Request.
+        """
+        response = self.client.post(
+            "/api/trace",
+            data=json.dumps({"code": "   \n\t"}),
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertEqual(data.get("status"), "syntax_error")
 
     def test_trace_valid_preset(self):
         """
@@ -89,20 +185,6 @@ class TestAppServer(unittest.TestCase):
             self.assertEqual(data.get("status"), "completed", f"Preset '{preset_id}' failed: {data.get('error')}")
             self.assertGreater(data.get("total_steps", 0), 0)
 
-    def test_trace_arbitrary_code_rejected(self):
-        """
-        Verify that submitting arbitrary Python code without a preset_id is strictly rejected.
-        """
-        response = self.client.post(
-            "/api/trace",
-            data=json.dumps({"code": "import os; print(os.listdir('.'))"}),
-            content_type="application/json"
-        )
-        self.assertEqual(response.status_code, 400)
-        data = response.get_json()
-        self.assertIn("error", data)
-        self.assertEqual(data.get("code"), "ARBITRARY_CODE_EXECUTION_DISABLED")
-
     def test_trace_unknown_preset_id_rejected(self):
         """
         Verify that submitting an unrecognized preset_id returns 400 Bad Request.
@@ -117,13 +199,13 @@ class TestAppServer(unittest.TestCase):
         self.assertIn("error", data)
         self.assertIn("allowed_presets", data)
 
-    def test_trace_invalid_json_payload_returns_400(self):
+    def test_trace_missing_both_fields_returns_400(self):
         """
-        Verify POST /api/trace with missing preset_id field returns 400 Bad Request.
+        Verify POST /api/trace with neither code nor preset_id returns 400 Bad Request.
         """
         response = self.client.post(
             "/api/trace",
-            data=json.dumps({"wrong_key": "pass"}),
+            data=json.dumps({"wrong_field": "pass"}),
             content_type="application/json"
         )
         self.assertEqual(response.status_code, 400)
@@ -134,7 +216,7 @@ class TestAppServer(unittest.TestCase):
         """
         Verify POST /api/trace with payload exceeding MAX_CONTENT_LENGTH (128 KB) returns 413.
         """
-        oversized_data = json.dumps({"preset_id": "bubble_sort", "padding": "A" * (130 * 1024)})
+        oversized_data = json.dumps({"code": "x = 1\n", "padding": "A" * (130 * 1024)})
         response = self.client.post(
             "/api/trace",
             data=oversized_data,

@@ -4,7 +4,7 @@
  *
  * Implements deterministic timeline navigation, live memory diffing,
  * dynamic sequence/pointer rendering, cumulative console synchronization,
- * and algorithm preset loading.
+ * algorithm preset loading, and custom Python code playground.
  *
  * Strict security & anti-vibe-coding rules:
  * - Zero eval() or unsafe innerHTML insertion of runtime data
@@ -15,21 +15,47 @@
 (function () {
     "use strict";
 
+    // Default introductory Python example for the Custom Code Playground
+    const DEFAULT_PYTHON_EXAMPLE = `# Custom Code Playground // Two-Pointer Palindrome Check
+def is_palindrome(text: str) -> bool:
+    left = 0
+    right = len(text) - 1
+    while left < right:
+        if text[left] != text[right]:
+            return False
+        left += 1
+        right -= 1
+    return True
+
+text = "racecar"
+result = is_palindrome(text)
+print("Is palindrome:", result)
+`;
+
     // 1. State Store
-    let traceData = null;       // Full trace payload from /api/trace
-    let currentStepIndex = 0;   // Active step pointer
-    let isPlaying = false;      // Playback active state
-    let playTimer = null;       // Active playback timeout ID
-    let isTracing = false;      // API request in-flight flag
+    let traceData = null;           // Full trace payload from /api/trace
+    let currentStepIndex = 0;       // Active step pointer
+    let isPlaying = false;          // Playback active state
+    let playTimer = null;           // Active playback timeout ID
+    let isTracing = false;          // API request in-flight flag
     let currentActiveLineNo = null; // Active highlighted source line
+    let currentErrorLineNo = null;  // Active syntax error line in editor
     let hasTriggeredDiwaliThisRun = false; // Diwali animation single-fire guard
+    let cmEditor = null;            // CodeMirror editor instance
     const API_BASE_URL = window.XRAY_API_BASE_URL || "";
 
     // 2. DOM Elements Cache
     const presetSelect = document.getElementById("preset-select");
     const btnRun = document.getElementById("btn-run");
     const btnClear = document.getElementById("btn-clear");
+    const btnResetExample = document.getElementById("btn-reset-example");
     const traceStatus = document.getElementById("trace-status");
+    const syntaxStatusBadge = document.getElementById("syntax-status-badge");
+    const validationBanner = document.getElementById("validation-banner");
+    const validationMessage = document.getElementById("validation-message");
+    const tabCustomCode = document.getElementById("tab-custom-code");
+    const tabExploreExamples = document.getElementById("tab-explore-examples");
+
     const codeInput = document.getElementById("code-input");
     const editorGutter = document.getElementById("editor-gutter");
     const editorActiveLine = document.getElementById("editor-active-line");
@@ -93,11 +119,79 @@
         }
     }
 
+    function getEditorCode() {
+        if (cmEditor) {
+            return cmEditor.getValue();
+        }
+        return codeInput ? codeInput.value : "";
+    }
+
+    function setEditorCode(code) {
+        if (cmEditor) {
+            cmEditor.setValue(code);
+        }
+        if (codeInput) {
+            codeInput.value = code;
+        }
+        updateEditorGutter();
+        syncEditorScroll();
+    }
+
+    // Syntax validation feedback handling
+    function clearSyntaxValidation() {
+        if (validationBanner) {
+            validationBanner.style.display = "none";
+        }
+        if (validationMessage) {
+            validationMessage.textContent = "";
+        }
+        if (syntaxStatusBadge) {
+            syntaxStatusBadge.textContent = "SYNTAX // READY";
+            syntaxStatusBadge.className = "syntax-badge syntax-badge-idle";
+        }
+        if (cmEditor && currentErrorLineNo) {
+            cmEditor.removeLineClass(currentErrorLineNo - 1, "background", "cm-error-line");
+            cmEditor.removeLineClass(currentErrorLineNo - 1, "gutter", "cm-gutter-error");
+        }
+        currentErrorLineNo = null;
+    }
+
+    function showSyntaxError(message, lineNo, colNo) {
+        if (validationBanner) {
+            validationBanner.style.display = "flex";
+        }
+        if (validationMessage) {
+            validationMessage.textContent = `Syntax Error (line ${lineNo || 1}, col ${colNo || 1}): ${message}`;
+        }
+        if (syntaxStatusBadge) {
+            syntaxStatusBadge.textContent = `SYNTAX // ERROR L${lineNo || 1}`;
+            syntaxStatusBadge.className = "syntax-badge syntax-badge-error";
+        }
+        if (cmEditor && lineNo) {
+            if (currentErrorLineNo) {
+                cmEditor.removeLineClass(currentErrorLineNo - 1, "background", "cm-error-line");
+                cmEditor.removeLineClass(currentErrorLineNo - 1, "gutter", "cm-gutter-error");
+            }
+            currentErrorLineNo = lineNo;
+            cmEditor.addLineClass(lineNo - 1, "background", "cm-error-line");
+            cmEditor.addLineClass(lineNo - 1, "gutter", "cm-gutter-error");
+            cmEditor.scrollIntoView({ line: lineNo - 1, ch: (colNo || 1) - 1 }, 40);
+        }
+    }
+
+    function showSyntaxValid() {
+        clearSyntaxValidation();
+        if (syntaxStatusBadge) {
+            syntaxStatusBadge.textContent = "SYNTAX // VALID";
+            syntaxStatusBadge.className = "syntax-badge syntax-badge-valid";
+        }
+    }
+
     // Gutter and Highlighting Synchronization
     function updateEditorGutter() {
         if (!editorGutter || !codeInput) return;
-        const code = codeInput.value;
-        const lines = code.split("\n");
+        const rawCode = getEditorCode();
+        const lines = rawCode.split("\n");
         const lineCount = Math.max(1, lines.length);
 
         const fragment = document.createDocumentFragment();
@@ -108,22 +202,11 @@
             if (currentActiveLineNo === i) {
                 lineDiv.classList.add("gutter-active");
             }
-
-            const marker = document.createElement("span");
-            marker.className = "gutter-marker";
-            marker.textContent = "▶";
-
-            const num = document.createElement("span");
-            num.className = "gutter-number";
-            num.textContent = String(i);
-
-            lineDiv.appendChild(marker);
-            lineDiv.appendChild(num);
+            lineDiv.textContent = String(i);
             fragment.appendChild(lineDiv);
         }
 
         editorGutter.replaceChildren(fragment);
-        editorGutter.scrollTop = codeInput.scrollTop;
     }
 
     function syncEditorScroll() {
@@ -148,10 +231,23 @@
     }
 
     function highlightEditorLine(lineNo) {
-        if (!codeInput) return;
-        const code = codeInput.value;
+        const code = getEditorCode();
         const lines = code.split("\n");
 
+        // 1. Update CodeMirror active line styling
+        if (cmEditor) {
+            if (typeof currentActiveLineNo === "number" && currentActiveLineNo >= 1) {
+                cmEditor.removeLineClass(currentActiveLineNo - 1, "background", "cm-active-line");
+                cmEditor.removeLineClass(currentActiveLineNo - 1, "gutter", "cm-gutter-active");
+            }
+            if (typeof lineNo === "number" && lineNo >= 1 && lineNo <= lines.length) {
+                cmEditor.addLineClass(lineNo - 1, "background", "cm-active-line");
+                cmEditor.addLineClass(lineNo - 1, "gutter", "cm-gutter-active");
+                cmEditor.scrollIntoView({ line: lineNo - 1, ch: 0 }, 40);
+            }
+        }
+
+        // 2. Update native gutter & highlight layer for fallback & test contracts
         if (typeof lineNo !== "number" || lineNo < 1 || lineNo > lines.length) {
             currentActiveLineNo = null;
             if (editorGutter) {
@@ -175,59 +271,87 @@
         }
 
         // Scroll editor to keep active line visible without modifying user cursor or text selection
-        const lineHeight = 20;
-        const paddingTop = 10;
-        const targetTop = paddingTop + (lineNo - 1) * lineHeight;
-        const targetBottom = targetTop + lineHeight;
-        const viewTop = codeInput.scrollTop;
-        const viewBottom = viewTop + codeInput.clientHeight;
+        if (codeInput && !cmEditor) {
+            const lineHeight = 20;
+            const paddingTop = 10;
+            const targetTop = paddingTop + (lineNo - 1) * lineHeight;
+            const targetBottom = targetTop + lineHeight;
+            const viewTop = codeInput.scrollTop;
+            const viewBottom = viewTop + codeInput.clientHeight;
 
-        if (targetTop < viewTop + 15) {
-            codeInput.scrollTop = Math.max(0, targetTop - 30);
-        } else if (targetBottom > viewBottom - 15) {
-            codeInput.scrollTop = targetBottom + 30 - codeInput.clientHeight;
+            if (targetTop < viewTop + 15) {
+                codeInput.scrollTop = Math.max(0, targetTop - 30);
+            } else if (targetBottom > viewBottom - 15) {
+                codeInput.scrollTop = targetBottom + 30 - codeInput.clientHeight;
+            }
         }
 
         // CRITICAL: Synchronize gutter and active line position AFTER codeInput.scrollTop is updated
         syncEditorScroll();
     }
 
-    // 4. Algorithm Presets Loader
+    // 4. Algorithm Presets Loader (Explore Examples)
     function initPresets() {
-        if (!presetSelect || !codeInput) return;
+        if (!presetSelect) return;
         presetSelect.addEventListener("change", function () {
             const key = presetSelect.value;
-            // Default option ("Load Algorithm Preset..."): do NOT overwrite editor
+            // Default option ("Explore Examples..."): do NOT overwrite editor
             if (!key) return;
 
             const presets = window.ALGORITHM_PRESETS || {};
             if (Object.prototype.hasOwnProperty.call(presets, key)) {
                 pause();
                 resetTraceVisuals();
-                codeInput.value = presets[key];
-                codeInput.scrollTop = 0;
-                updateEditorGutter();
+                clearSyntaxValidation();
+                setEditorCode(presets[key]);
                 highlightEditorLine(null);
-                updateStatus(`PRESET LOADED // ${key.toUpperCase()}`);
+                updateStatus(`EXAMPLE LOADED // ${key.toUpperCase()}`);
             }
         });
     }
 
-    // 5. Run & Trace API Client (Preset Only)
+    // 5. Visualize Code API Client (Syntax Validation + Execution Trace)
     async function runTrace() {
         if (isTracing) return;
-        const presetId = presetSelect ? presetSelect.value : "";
-        const rawCode = codeInput ? codeInput.value : "";
+        const rawCode = getEditorCode();
 
-        if (!presetId || !rawCode.trim()) {
-            updateStatus("SELECT PRESET // CHOOSE ALGORITHM", "status-error");
+        // 1. Client-side empty validation check
+        if (!rawCode.trim()) {
+            showSyntaxError("Code submission cannot be empty. Please enter Python code to visualize.", 1, 1);
+            updateStatus("VALIDATION // CODE CANNOT BE EMPTY", "status-error");
             if (consoleOutput) {
-                consoleOutput.textContent = "Please select an algorithm preset from the dropdown menu above to trace.\n";
+                consoleOutput.textContent = "Error: Code submission cannot be empty.\n";
                 consoleOutput.classList.remove("console-empty");
             }
             return;
         }
 
+        clearSyntaxValidation();
+
+        // 2. Syntax validation pre-flight via /api/validate
+        try {
+            const valResp = await fetch(`${API_BASE_URL}/api/validate`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ code: rawCode })
+            });
+            const valData = await valResp.json();
+
+            if (!valData.valid) {
+                const err = valData.error || {};
+                showSyntaxError(err.message || "Invalid Python syntax", err.line_no || 1, err.offset || 1);
+                updateStatus(`SYNTAX ERROR // L${err.line_no || 1}`, "status-error");
+                if (consoleOutput) {
+                    consoleOutput.textContent = `SyntaxError: ${err.message || "Invalid syntax"} (line ${err.line_no || 1}, col ${err.offset || 1})\n`;
+                    consoleOutput.classList.remove("console-empty");
+                }
+                return;
+            }
+        } catch (valErr) {
+            // If validation endpoint has network error, proceed to trace endpoint
+        }
+
+        showSyntaxValid();
         pause();
         isTracing = true;
         hasTriggeredDiwaliThisRun = false;
@@ -238,12 +362,21 @@
         if (btnClear) btnClear.disabled = true;
 
         try {
+            // Determine if active code matches an unmodified preset
+            const presetId = presetSelect ? presetSelect.value : "";
+            const presets = window.ALGORITHM_PRESETS || {};
+            const isUnmodifiedPreset = presetId && presets[presetId] && presets[presetId].trim() === rawCode.trim();
+
+            const requestPayload = isUnmodifiedPreset
+                ? { preset_id: presetId, code: rawCode }
+                : { code: rawCode };
+
             const response = await fetch(`${API_BASE_URL}/api/trace`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
                 },
-                body: JSON.stringify({ preset_id: presetId })
+                body: JSON.stringify(requestPayload)
             });
 
             const data = await response.json();
@@ -251,7 +384,14 @@
             // Handle errors or HTTP non-200 responses
             if (!response.ok || data.status === "syntax_error") {
                 resetTraceVisuals();
-                const errMsg = typeof data.error === "string" ? data.error : (data.error && data.error.message ? data.error.message : "Execution failed");
+                const errMsg = typeof data.error === "string"
+                    ? data.error
+                    : (data.error && data.error.message ? data.error.message : (data.details || "Execution failed"));
+
+                if (data.status === "syntax_error" && data.error) {
+                    showSyntaxError(data.error.message || errMsg, data.error.line_no || 1, data.error.offset || 1);
+                }
+
                 if (consoleOutput) {
                     consoleOutput.textContent = `Error: ${errMsg}\n`;
                     consoleOutput.classList.remove("console-empty");
@@ -722,7 +862,7 @@
         renderStep(index);
     }
 
-    // 8. Clear and Error Recovery
+    // 8. Visual State Reset & Clear Handlers
     function resetTraceVisuals() {
         pause();
         traceData = null;
@@ -740,9 +880,9 @@
 
         if (timelineScrubber) {
             timelineScrubber.disabled = true;
+            timelineScrubber.value = "0";
             timelineScrubber.min = "0";
             timelineScrubber.max = "0";
-            timelineScrubber.value = "0";
         }
 
         if (stepCounter) {
@@ -756,7 +896,7 @@
             const td = document.createElement("td");
             td.colSpan = 5;
             td.className = "table-empty-message";
-            td.textContent = "No active execution frame. Execute a trace to inspect variable snapshots and mutations.";
+            td.textContent = "No variables in scope. Run a trace to populate memory.";
             tr.appendChild(td);
             memoryTableBody.appendChild(tr);
         }
@@ -770,6 +910,8 @@
             consoleOutput.textContent = "No standard output recorded. Run a trace to view print() outputs.";
             consoleOutput.classList.add("console-empty");
         }
+
+        updatePlayButtonIcon();
     }
 
     function handleClear() {
@@ -780,12 +922,32 @@
         if (window.stopDiwaliSpark) window.stopDiwaliSpark();
 
         // Clear editor completely
+        setEditorCode("");
+
+        if (presetSelect) {
+            presetSelect.value = "";
+        }
         if (codeInput) {
             codeInput.value = "";
             codeInput.focus();
         }
 
-        // Reset dropdown to default option
+        updateEditorGutter();
+        highlightEditorLine(null);
+        resetTraceVisuals();
+        clearSyntaxValidation();
+        updateStatus("CLEARED // EDITOR EMPTY");
+    }
+
+    function handleResetExample() {
+        pause();
+        traceData = null;
+        currentStepIndex = 0;
+        hasTriggeredDiwaliThisRun = false;
+        if (window.stopDiwaliSpark) window.stopDiwaliSpark();
+
+        setEditorCode(DEFAULT_PYTHON_EXAMPLE);
+
         if (presetSelect) {
             presetSelect.value = "";
         }
@@ -793,15 +955,57 @@
         updateEditorGutter();
         highlightEditorLine(null);
         resetTraceVisuals();
-        updateStatus("IDLE // AWAITING INPUT");
+        clearSyntaxValidation();
+        updateStatus("EXAMPLE RESET // PALINDROME CHECK");
     }
 
-    // 9. Event Listeners Wiring
+    // 9. CodeMirror Initialization
+    function initCodeMirror() {
+        if (window.CodeMirror && codeInput) {
+            try {
+                cmEditor = window.CodeMirror.fromTextArea(codeInput, {
+                    mode: "python",
+                    lineNumbers: true,
+                    indentUnit: 4,
+                    tabSize: 4,
+                    matchBrackets: true,
+                    autoCloseBrackets: true,
+                    lineWrapping: false,
+                    viewportMargin: Infinity
+                });
+
+                cmEditor.on("change", function () {
+                    const val = cmEditor.getValue();
+                    if (codeInput) {
+                        codeInput.value = val;
+                    }
+                    clearSyntaxValidation();
+                    updateEditorGutter();
+                });
+
+                cmEditor.on("focus", function () {
+                    if (tabCustomCode) {
+                        tabCustomCode.classList.add("active");
+                    }
+                });
+
+                // Hide native gutter since CodeMirror provides its own
+                if (editorGutter) {
+                    editorGutter.style.display = "none";
+                }
+            } catch (cmErr) {
+                console.warn("CodeMirror initialization fallback to native textarea:", cmErr);
+            }
+        }
+    }
+
+    // 10. Event Listeners Wiring
     function initEvents() {
         // Code input editor interactions (scrolling, typing, indentation)
         if (codeInput) {
             codeInput.addEventListener("scroll", syncEditorScroll);
             codeInput.addEventListener("input", function () {
+                clearSyntaxValidation();
                 updateEditorGutter();
                 updateActiveLineVisual();
             });
@@ -818,7 +1022,7 @@
             });
         }
 
-        // Run button
+        // Visualize Code button
         if (btnRun) {
             btnRun.addEventListener("click", runTrace);
         }
@@ -826,6 +1030,31 @@
         // Clear button (empties editor, resets dropdown and visual state)
         if (btnClear) {
             btnClear.addEventListener("click", handleClear);
+        }
+
+        // Reset Example button
+        if (btnResetExample) {
+            btnResetExample.addEventListener("click", handleResetExample);
+        }
+
+        // Header Navigation Tabs
+        if (tabCustomCode) {
+            tabCustomCode.addEventListener("click", function () {
+                if (cmEditor) {
+                    cmEditor.focus();
+                } else if (codeInput) {
+                    codeInput.focus();
+                }
+            });
+        }
+
+        if (tabExploreExamples) {
+            tabExploreExamples.addEventListener("click", function (e) {
+                e.preventDefault();
+                if (presetSelect) {
+                    presetSelect.focus();
+                }
+            });
         }
 
         // Transport Controls
@@ -854,6 +1083,7 @@
         if (btnNext) {
             btnNext.addEventListener("click", function () {
                 pause();
+                if (window.stopDiwaliSpark) window.stopDiwaliSpark();
                 goToStep(currentStepIndex + 1);
             });
         }
@@ -887,18 +1117,18 @@
             });
         }
 
-        // Keyboard Shortcuts (Space, Left, Right, Home, End)
+        // Keyboard Shortcuts (Space, Left, Right, Home, End, Ctrl+Enter)
         window.addEventListener("keydown", function (e) {
-            // Do not intercept keystrokes while user is editing code
-            if (document.activeElement === codeInput) {
-                // Allow Ctrl+Enter or Cmd+Enter to trigger Run & Trace
-                if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-                    e.preventDefault();
-                    runTrace();
-                }
+            const isEditing = (document.activeElement === codeInput) || (cmEditor && cmEditor.hasFocus());
+
+            // Allow Ctrl+Enter or Cmd+Enter to trigger Visualize Code anytime
+            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                e.preventDefault();
+                runTrace();
                 return;
             }
 
+            if (isEditing) return;
             if (!traceData || traceData.total_steps === 0) return;
 
             if (e.code === "Space") {
@@ -924,15 +1154,19 @@
         });
     }
 
-    // 10. Initialization with robust readyState check
+    // 11. Initialization
     function init() {
-        if (codeInput) {
-            codeInput.readOnly = true;
-        }
         initPresets();
         initEvents();
+        initCodeMirror();
+
+        // Populate Custom Code Playground with default introductory example
+        setEditorCode(DEFAULT_PYTHON_EXAMPLE);
+
         updateEditorGutter();
         syncEditorScroll();
+        resetTraceVisuals();
+        updateStatus("READY // CUSTOM CODE PLAYGROUND");
     }
 
     if (document.readyState === "loading") {

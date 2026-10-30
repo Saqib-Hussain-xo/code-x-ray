@@ -7,21 +7,20 @@
 * **Architecture:** Python backend (`sys.settrace`, AST inspection, zero external tracer dependencies, Flask API server) + Industrial Dark Grid Vanilla Frontend.
 
 ## 2. Current State
-* **Active Phase:** Single Vercel Serverless Deployment with 25-Preset Allowlist Execution Complete.
-* **Backend Status:** Core `tracer.py` engine and Flask API adapted for Vercel serverless execution via `api/index.py` and `vercel.json`. Enforces a strict server-side allowlist (`presets_data.py`) containing the 25 canonical DSA algorithm presets. Arbitrary Python code execution is rejected with HTTP 400 (`ARBITRARY_CODE_EXECUTION_DISABLED`). Trusted preset code executes in-process safely in under 0.05s. Inactive fallback assets (`sandbox_adapter.py`, `render.yaml`, `Procfile`) are preserved intact for future sandbox environments.
+* **Active Phase:** Custom Code Playground Implementation as Primary Experience Complete.
+* **Backend Status:** Added `POST /api/validate` for real-time Python AST syntax pre-validation returning line and column offsets. Configured `POST /api/trace` to accept custom Python code (`{"code": "..."}`) or allowlisted preset IDs (`{"preset_id": "..."}`) with bounded resource limits (10,000 characters, 128 KB payload limit, 1,000 step ceiling, 2.0s wall-clock timeout, 20 KB stdout limit). Gated local execution and fail-closed Judge0 container sandbox adapter supported.
 * **Frontend Status:** 
-  * Header badge updated to `PRESET RUNNER // 25 DSA ALGORITHMS`.
-  * Source Script editor `<textarea id="code-input">` configured as read-only, preventing unintended keystrokes while keeping text selection and copying enabled.
-  * Preserved unmistakable active-line amber highlighting (`#d29922` at 32% opacity with 4px left amber border) and synchronized gutter line styling (`border-left: 3px solid #d29922`, gold number `#ffd166`, active marker `▶`).
-  * Textarea transparency guaranteed (`background: transparent !important`).
-  * Scroll offset synchronization and 1-based line alignment verified.
-  * Memory Map highlights newly created variables (`NEW` badge, `.val-new` blue accent) distinctly from mutated variables (`2 → 3` concise transition indicators, `.val-mutated` green accent). Unchanged variables are visually quiet with `-` indicators.
-  * Diwali Completion Spark Canvas (`static/js/spark.js`) triggers celebratory geometric spark particles upon reaching the final step of a completed preset execution.
-  * Responsive 2-column layout, centered sequence stage, and high-contrast transport bar preserved.
-* **Tests Status:** 44/44 tests passing cleanly in ~0.35s across:
-  * `test_app.py` (11 tests: health check, preset listing, single preset trace, all 25 presets execution, arbitrary code rejection, unknown preset rejection, invalid payload, oversized payload 413, rate limit 429, template routes, favicon).
+  * Custom Code Playground is now the default landing experience when opening Code X-Ray.
+  * Added CodeMirror Python editor with syntax highlighting, line numbers, automatic indentation, bracket matching, and dark industrial theme token alignment.
+  * Integrated introductory default Python example (`DEFAULT_PYTHON_EXAMPLE`) into editor upon initial page load.
+  * Editor controls updated: primary CTA **Visualize Code** (`#btn-run`), **Reset Example** (`#btn-reset-example`), and **Clear** (`#btn-clear`).
+  * 25 preloaded DSA problems moved to secondary section **Explore Examples** (`#preset-select`) accessible via top navigation tab or selector, loading into editor for user inspection, editing, and visualization.
+  * Added inline validation feedback banner (`#validation-banner`) and syntax status badge (`#syntax-status-badge`) highlighting syntax error line and column before execution.
+  * Preserved full visualization capabilities: active execution line highlighting (`#d29922`), step-by-step playback transport, live memory diffing (`NEW` vs `2 → 3`), sequence and pointer stage centering, and Diwali celebration completion sparks.
+* **Tests Status:** 50/50 tests passing cleanly in ~0.9s across:
+  * `test_app.py` (16 tests: health check, preset listing, AST syntax validation, custom code execution, syntax error handling, empty code validation, 25 preset runs, oversized payload 413, rate limiter 429, template routes, favicon).
   * `test_presets.py` (7 tests verifying 1:1 match between `presets.js` and `presets_data.py` across all 6 categories).
-  * `test_frontend_integration.py` (10 tests: layout, editor gutter, console height, sequence stage centering, playback timers, memory map diffs, spark canvas).
+  * `test_frontend_integration.py` (11 tests: custom code playground UI elements, layout, editor gutter, console height, sequence stage centering, playback timers, memory map diffs, spark canvas).
   * `test_sandbox_adapter.py` (7 tests: standalone unit tests for the preserved fallback adapter).
   * `test_tracer.py` (9 tests: execution tracing, recursion protection, timeout, step limits, stdout capture, and truncation).
 

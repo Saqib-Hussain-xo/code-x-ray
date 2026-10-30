@@ -124,7 +124,35 @@ a:focus-visible {
 .header-nav {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 12px;
+}
+
+.nav-tab {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background-color: transparent;
+    border: 1px solid var(--border-color);
+    padding: 3px 10px;
+    border-radius: var(--radius-sm);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.nav-tab:hover {
+    color: var(--text-primary);
+    border-color: #388bfd;
+}
+
+.nav-tab.active {
+    color: #58a6ff;
+    background-color: #0d1829;
+    border-color: #1f3a5f;
+    font-weight: 700;
 }
 
 .runtime-badge {
@@ -225,6 +253,84 @@ a:focus-visible {
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--text-muted);
+}
+
+.panel-header-left, .panel-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.panel-badge-custom {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--accent-mutation);
+    border: 1px solid rgba(63, 185, 80, 0.4);
+    background-color: rgba(63, 185, 80, 0.08);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+}
+
+.syntax-badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+}
+
+.syntax-badge-idle {
+    color: var(--text-dim);
+    border-color: var(--border-color);
+    background-color: var(--bg-surface);
+}
+
+.syntax-badge-valid {
+    color: var(--accent-mutation);
+    border-color: rgba(63, 185, 80, 0.4);
+    background-color: rgba(63, 185, 80, 0.1);
+}
+
+.syntax-badge-error {
+    color: var(--accent-danger);
+    border-color: rgba(248, 81, 73, 0.4);
+    background-color: rgba(248, 81, 73, 0.1);
+}
+
+.validation-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background-color: rgba(248, 81, 73, 0.12);
+    border-bottom: 1px solid rgba(248, 81, 73, 0.4);
+    color: #ff7b72;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.4;
+    flex-shrink: 0;
+}
+
+.validation-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background-color: var(--accent-danger);
+    color: #0b0e14;
+    font-weight: 800;
+    font-size: 10px;
+    flex-shrink: 0;
+}
+
+.validation-message {
+    word-break: break-word;
 }
 
 .panel-body {
@@ -460,6 +566,88 @@ a:focus-visible {
     caret-color: var(--accent-pointer-b);
 }
 
+/* CodeMirror Custom Dark Theme Integration */
+.CodeMirror {
+    height: 100% !important;
+    position: absolute !important;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--bg-editor) !important;
+    color: var(--text-primary) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 13px !important;
+    line-height: 20px !important;
+    z-index: 3;
+}
+
+.CodeMirror-gutters {
+    background-color: #0e1218 !important;
+    border-right: 1px solid var(--border-color) !important;
+    padding: 0 2px 0 0;
+}
+
+.CodeMirror-linenumber {
+    color: var(--text-dim) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 11px !important;
+    padding: 0 8px 0 4px !important;
+}
+
+.CodeMirror-cursor {
+    border-left: 2px solid var(--accent-pointer-b) !important;
+}
+
+.CodeMirror-selected {
+    background-color: rgba(56, 139, 253, 0.28) !important;
+}
+
+.CodeMirror-focused .CodeMirror-selected {
+    background-color: rgba(56, 139, 253, 0.38) !important;
+}
+
+.CodeMirror-matchingbracket {
+    border-bottom: 2px solid #3fb950 !important;
+    color: #3fb950 !important;
+    font-weight: 700;
+}
+
+/* CodeMirror Execution Active Line Highlight */
+.cm-active-line {
+    background-color: rgba(210, 153, 34, 0.32) !important;
+    border-left: 4px solid #d29922;
+}
+
+.cm-gutter-active .CodeMirror-linenumber {
+    color: #ffd166 !important;
+    font-weight: 700;
+    border-left: 3px solid #d29922;
+}
+
+/* CodeMirror Syntax Error Line Highlight */
+.cm-error-line {
+    background-color: rgba(248, 81, 73, 0.25) !important;
+    border-left: 4px solid #f85149;
+}
+
+.cm-gutter-error .CodeMirror-linenumber {
+    color: #f85149 !important;
+    font-weight: 700;
+    border-left: 3px solid #f85149;
+}
+
+/* CodeMirror Syntax Tokens (Dark Industrial Palette) */
+.cm-s-default .cm-keyword { color: #ff7b72 !important; font-weight: 600; }
+.cm-s-default .cm-def { color: #d2a8ff !important; font-weight: 600; }
+.cm-s-default .cm-variable { color: #e6edf3 !important; }
+.cm-s-default .cm-variable-2 { color: #79c0ff !important; }
+.cm-s-default .cm-builtin { color: #ffa657 !important; }
+.cm-s-default .cm-string { color: #a5d6ff !important; }
+.cm-s-default .cm-number { color: #79c0ff !important; }
+.cm-s-default .cm-operator { color: #ff7b72 !important; }
+.cm-s-default .cm-comment { color: #8b949e !important; font-style: italic; }
+
 /* Panel 2: Memory Map Table */
 .table-scroll-container {
     flex: 1;
@@ -669,8 +857,6 @@ a:focus-visible {
     display: flex;
     justify-content: center;
     gap: 4px;
-    margin-bottom: 4px;
-}
     margin-bottom: 4px;
 }
 

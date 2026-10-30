@@ -217,6 +217,53 @@ class TestFrontendIntegration(unittest.TestCase):
         self.assertIn("styles.css?v=1.1.0", html)
         self.assertIn("app.js?v=1.1.0", html)
 
+    def test_custom_code_playground_ui_elements(self):
+        """Verify Custom Code Playground is default landing mode with required elements."""
+        res_home = self.client.get("/")
+        self.assertEqual(res_home.status_code, 200)
+        html = res_home.data.decode("utf-8")
+
+        # 1. Navigation elements: Custom Code primary, Explore Examples secondary
+        self.assertIn('id="tab-custom-code"', html)
+        self.assertIn('id="tab-explore-examples"', html)
+        self.assertIn("CUSTOM CODE PLAYGROUND", html)
+
+        # 2. Controls: Visualize Code, Reset Example, Clear, and Explore Examples dropdown
+        self.assertIn('id="btn-run"', html)
+        self.assertIn("Visualize Code", html)
+        self.assertIn('id="btn-reset-example"', html)
+        self.assertIn('id="btn-clear"', html)
+        self.assertIn('id="preset-select"', html)
+
+        # 3. Validation feedback elements
+        self.assertIn('id="syntax-status-badge"', html)
+        self.assertIn('id="validation-banner"', html)
+
+        # 4. CodeMirror vendor assets linked
+        self.assertIn("vendor/codemirror/codemirror.min.css", html)
+        self.assertIn("vendor/codemirror/codemirror.min.js", html)
+        self.assertIn("vendor/codemirror/python.min.js", html)
+
+        # 5. JavaScript state and logic in app.js
+        res_js = self.client.get("/static/js/app.js")
+        self.assertEqual(res_js.status_code, 200)
+        app_js = res_js.data.decode("utf-8")
+        self.assertIn("DEFAULT_PYTHON_EXAMPLE", app_js)
+        self.assertIn("handleResetExample", app_js)
+        self.assertIn("showSyntaxError", app_js)
+        self.assertIn("clearSyntaxValidation", app_js)
+        self.assertIn("initCodeMirror", app_js)
+
+        # 6. CSS rules in styles.css
+        res_css = self.client.get("/static/css/styles.css")
+        self.assertEqual(res_css.status_code, 200)
+        css = res_css.data.decode("utf-8")
+        self.assertIn(".CodeMirror", css)
+        self.assertIn(".cm-active-line", css)
+        self.assertIn(".cm-error-line", css)
+        self.assertIn(".validation-banner", css)
+        self.assertIn(".panel-badge-custom", css)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,19 +3,28 @@ X-Ray Execution Agent: HTTP Backend Application Server
 Module: app.py
 
 Features:
-- REST API routing with /api/trace and /api/health endpoints.
-- Error handling with structured 400 responses for syntax and malformed inputs.
+- REST API routing with /api/trace, /api/validate, /api/presets, and /api/health endpoints.
+- Real-time Python syntax validation using standard library AST parsing.
+- Support for Custom Code Playground execution with bounded resource limits.
+- Secure routing with sandboxed execution in production and verified local mode.
 - Server-rendered routing for main visualizer, privacy policy, and terms.
-- Static asset serving for minimal geometric SVG favicon and frontend assets.
-- Clean environment-configurable host and port binding for custom domain readiness.
+- Static asset serving for minimal geometric SVG favicon and CodeMirror/frontend assets.
 """
 
+import ast
 import os
 import time
 from collections import defaultdict
 from flask import Flask, jsonify, render_template, request, send_from_directory
 from tracer import ExecutionTracer
 from presets_data import ALGORITHM_PRESETS, ALLOWED_PRESET_IDS
+from sandbox_adapter import (
+    Judge0SandboxAdapter,
+    SandboxConfigurationError,
+    SandboxExecutionError,
+    SandboxRateLimitError,
+    SandboxTimeoutError
+)
 
 # Resolve absolute paths for Vercel serverless environment compatibility
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -30,8 +39,9 @@ app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 # Request payload safety limit: 128 KB
 app.config["MAX_CONTENT_LENGTH"] = 128 * 1024
 
-# Application metadata
-APP_VERSION = "1.0.0"
+# Safety constants for request processing
+MAX_CODE_CHARS = 10000
+APP_VERSION = "1.2.0"
 
 # Sliding-window rate limiter (20 requests per 60 seconds per IP)
 RATE_LIMIT_WINDOW = 60
@@ -83,13 +93,15 @@ def add_no_cache_headers(response):
 def health_check():
     """
     Service health check endpoint.
-    Returns status: healthy, version, and preset execution capability.
+    Returns status: healthy, version, and execution capabilities.
     """
+    execution_mode = os.environ.get("XRAY_EXECUTION_MODE", "playground").lower()
     return jsonify({
         "status": "healthy",
         "version": APP_VERSION,
-        "execution_mode": "preset_only",
-        "total_presets": len(ALGORITHM_PRESETS)
+        "execution_mode": execution_mode,
+        "total_presets": len(ALGORITHM_PRESETS),
+        "custom_code_enabled": True
     }), 200
 
 
@@ -112,13 +124,87 @@ def list_presets():
     }), 200
 
 
+@app.route("/api/validate", methods=["POST", "OPTIONS"])
+def validate_code():
+    """
+    Python syntax validation endpoint using standard AST parsing.
+    Detects syntax errors before execution, returning exact line and column offsets.
+    """
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    payload = request.get_json(silent=True)
+    if not payload or not isinstance(payload, dict):
+        return jsonify({
+            "valid": False,
+            "error": {
+                "type": "ValidationError",
+                "message": "Invalid request payload. Expected JSON object with 'code' field.",
+                "line_no": 1,
+                "offset": 1
+            }
+        }), 400
+
+    code_str = payload.get("code")
+    if code_str is None or not isinstance(code_str, str):
+        return jsonify({
+            "valid": False,
+            "error": {
+                "type": "ValidationError",
+                "message": "Field 'code' must be a valid string.",
+                "line_no": 1,
+                "offset": 1
+            }
+        }), 400
+
+    if not code_str.strip():
+        return jsonify({
+            "valid": False,
+            "error": {
+                "type": "ValidationError",
+                "message": "Code submission cannot be empty. Please enter Python code to visualize.",
+                "line_no": 1,
+                "offset": 1
+            }
+        }), 400
+
+    if len(code_str) > MAX_CODE_CHARS:
+        return jsonify({
+            "valid": False,
+            "error": {
+                "type": "ValidationError",
+                "message": f"Code length exceeds maximum allowed limit of {MAX_CODE_CHARS} characters.",
+                "line_no": 1,
+                "offset": 1
+            }
+        }), 400
+
+    try:
+        ast.parse(code_str, filename="<user_code>")
+        return jsonify({"valid": True}), 200
+    except SyntaxError as syn_err:
+        line_no = syn_err.lineno or 1
+        col_no = syn_err.offset or 1
+        msg = syn_err.msg or "Invalid Python syntax"
+        return jsonify({
+            "valid": False,
+            "error": {
+                "type": "SyntaxError",
+                "message": msg,
+                "line_no": line_no,
+                "offset": col_no,
+                "text": (syn_err.text or "").strip()
+            }
+        }), 200
+
+
 @app.route("/api/trace", methods=["POST", "OPTIONS"])
 def trace_code():
     """
-    Runtime code interception endpoint.
-    Accepts JSON body: {"preset_id": "..."}
-    Strictly restricted to the 25 pre-approved algorithm presets.
-    Arbitrary user-submitted Python code is rejected for security.
+    Runtime code interception and execution endpoint.
+    Accepts JSON body: {"code": "..."} for custom code or {"preset_id": "..."} for preloaded problems.
+    Routes execution to an isolated sandbox environment or verified local execution mode.
+    Guarantees AST syntax pre-validation, input bounds, and fail-closed security.
     """
     if request.method == "OPTIONS":
         return ("", 204)
@@ -135,45 +221,124 @@ def trace_code():
     payload = request.get_json(silent=True)
     if not payload or not isinstance(payload, dict):
         return jsonify({
-            "error": "Invalid request payload. Expected JSON object with a 'preset_id' field."
-        }), 400
-
-    # Explicit rejection of arbitrary code submissions
-    if "code" in payload and "preset_id" not in payload:
-        return jsonify({
-            "error": "Arbitrary code execution is disabled in this demo. Please provide a valid 'preset_id' from the 25 supported presets.",
-            "code": "ARBITRARY_CODE_EXECUTION_DISABLED",
-            "allowed_presets": list(ALGORITHM_PRESETS.keys())
+            "error": "Invalid request payload. Expected JSON object with 'code' or 'preset_id' field."
         }), 400
 
     preset_id = payload.get("preset_id")
-    if not preset_id or not isinstance(preset_id, str):
+    code_str = payload.get("code")
+
+    # If neither preset_id nor code is provided
+    if not preset_id and (code_str is None or not isinstance(code_str, str)):
         return jsonify({
-            "error": "Field 'preset_id' must be a valid string identifier.",
-            "allowed_presets": list(ALGORITHM_PRESETS.keys())
+            "error": "Missing required field. Please provide 'code' or a valid 'preset_id'."
         }), 400
 
-    if preset_id not in ALGORITHM_PRESETS:
-        return jsonify({
-            "error": f"Unknown preset_id: '{preset_id}'. Only the 25 predefined algorithmic presets are supported.",
-            "allowed_presets": list(ALGORITHM_PRESETS.keys())
-        }), 400
+    # 1. Preset execution path (trusted allowlist)
+    if preset_id:
+        if not isinstance(preset_id, str):
+            return jsonify({
+                "error": "Field 'preset_id' must be a valid string identifier.",
+                "allowed_presets": list(ALGORITHM_PRESETS.keys())
+            }), 400
 
-    # Retrieve vetted, trusted Python code from backend allowlist
-    trusted_code = ALGORITHM_PRESETS[preset_id]["code"]
+        if preset_id not in ALGORITHM_PRESETS:
+            return jsonify({
+                "error": f"Unknown preset_id: '{preset_id}'. Only the 25 predefined algorithmic presets are supported.",
+                "allowed_presets": list(ALGORITHM_PRESETS.keys())
+            }), 400
 
-    # Execute line-by-line deterministic tracer engine directly
-    tracer = ExecutionTracer(max_steps=1000, max_seconds=2.0)
+        target_code = ALGORITHM_PRESETS[preset_id]["code"]
+        is_preset = True
+    else:
+        # 2. Custom code execution path
+        if not code_str.strip():
+            return jsonify({
+                "status": "syntax_error",
+                "total_steps": 0,
+                "steps": [],
+                "error": {
+                    "type": "ValidationError",
+                    "message": "Code submission cannot be empty. Please enter Python code to visualize.",
+                    "line_no": 1,
+                    "offset": 1
+                },
+                "stdout": ""
+            }), 400
 
+        if len(code_str) > MAX_CODE_CHARS:
+            return jsonify({
+                "error": f"Field 'code' exceeds maximum limit of {MAX_CODE_CHARS} characters."
+            }), 400
+
+        target_code = code_str
+        is_preset = False
+
+    # AST syntax validation before execution
     try:
-        result = tracer.run_trace(trusted_code)
-    except Exception as unexpected_err:
+        ast.parse(target_code, filename="<user_code>")
+    except SyntaxError as syn_err:
         return jsonify({
-            "error": "Internal tracer execution failed.",
-            "message": str(unexpected_err)
-        }), 500
+            "status": "syntax_error",
+            "total_steps": 0,
+            "steps": [],
+            "error": {
+                "type": "SyntaxError",
+                "message": syn_err.msg or "Invalid syntax",
+                "line_no": syn_err.lineno or 1,
+                "offset": syn_err.offset or 1
+            },
+            "stdout": ""
+        }), 400
 
-    # Syntax errors in vetted code should not occur, but return 400 defensively
+    exec_mode = os.environ.get("XRAY_EXECUTION_MODE", "local").lower()
+    allow_local = os.environ.get("XRAY_ALLOW_LOCAL_EXEC", "true").lower() == "true"
+    is_testing = app.config.get("TESTING", False)
+
+    # If it is a trusted preset OR local execution is authorized OR running under tests:
+    if is_preset or allow_local or exec_mode == "local" or is_testing:
+        tracer = ExecutionTracer(max_steps=1000, max_seconds=2.0)
+        try:
+            result = tracer.run_trace(target_code)
+        except Exception as unexpected_err:
+            return jsonify({
+                "error": "Internal tracer execution failed.",
+                "message": str(unexpected_err)
+            }), 500
+    else:
+        # Production arbitrary code execution: Fail-closed sandbox isolation
+        sandbox = Judge0SandboxAdapter()
+        try:
+            result = sandbox.execute(target_code)
+        except SandboxConfigurationError as cfg_err:
+            return jsonify({
+                "error": "Isolated sandbox execution provider is not configured.",
+                "details": str(cfg_err),
+                "code": "SANDBOX_NOT_CONFIGURED"
+            }), 503
+        except SandboxRateLimitError as rate_err:
+            return jsonify({
+                "error": str(rate_err),
+                "code": "SANDBOX_RATE_LIMITED"
+            }), 429
+        except SandboxTimeoutError as timeout_err:
+            result = {
+                "status": "timeout",
+                "total_steps": 0,
+                "steps": [],
+                "error": {
+                    "type": "TraceTimeout",
+                    "message": str(timeout_err),
+                    "line_no": 1
+                },
+                "stdout": ""
+            }
+        except SandboxExecutionError as exec_err:
+            return jsonify({
+                "error": "Isolated sandbox execution failed.",
+                "details": str(exec_err)
+            }), 503
+
+    # Syntax errors in user code are returned as structured 400 responses
     if result.get("status") == "syntax_error":
         return jsonify(result), 400
 

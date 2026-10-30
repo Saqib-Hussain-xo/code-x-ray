@@ -9,7 +9,7 @@
 * **Banned Gradients:** NO purple gradients, NO neon cyberpunk glows, NO multi-stop linear gradient text fills.
 * **Banned Radii:** NO pill-shaped buttons (`border-radius: 9999px` or `50px` is forbidden). Use sharp corners (`0px` to `4px` maximum).
 * **Banned Icons:** NO emoji characters anywhere in UI, headers, buttons, logs, or error prompts. Use crisp inline `<svg>` geometric paths only.
-* **Banned Punctuation:** NO em dashes (`—`) in UI copy, labels, legal pages, or documentation. Use standard hyphens (`-`), colons (`:`), or periods (`.`).
+* **Banned Punctuation:** NO em dashes (` - `) in UI copy, labels, legal pages, or documentation. Use standard hyphens (`-`), colons (`:`), or periods (`.`).
 * **Banned Copy:** NO AI marketing fluff, NO vague hype phrases (e.g., "Unleash the power", "Supercharge", "Next-gen magic"). Use precise technical terminology (e.g., "Deterministic Python Runtime Inspector and Pointer Visualizer").
 * **Banned Elements:** NO fake reviews, NO fake testimonials, NO fake metric badges, NO AI-generated stock illustrations.
 * **Banned Animations:** NO intrusive scroll animations, NO parallax scrolling, NO custom circle mouse cursors.

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>X-Ray // Runtime Inspector</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}?v=1.1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/codemirror/codemirror.min.css') }}?v=1.1.0">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=1.1.0">
 </head>
 <body>
@@ -22,6 +23,8 @@
                 <span class="brand-title">X-Ray // Runtime Inspector</span>
             </div>
             <nav class="header-nav">
+                <span id="tab-custom-code" class="nav-tab active">Custom Code</span>
+                <a href="#explore-examples" id="tab-explore-examples" class="nav-tab">Explore Examples</a>
                 <span class="runtime-badge">PYTHON 3</span>
                 <a href="/privacy" class="header-link">Privacy Policy</a>
                 <a href="/terms" class="header-link">Terms and Conditions</a>
@@ -32,70 +35,87 @@
         <main class="workspace-grid">
             <!-- Left Column: Source Script (Top) and Console Output (Bottom) -->
             <div class="workspace-column left-column">
-                <!-- Panel 1: Source Script Editor -->
+                <!-- Panel 1: Source Script Editor / Custom Code Playground -->
                 <section class="panel panel-editor" aria-label="Source Script Editor">
                     <div class="panel-header">
-                        <span class="panel-title">Source Script // Python</span>
-                        <span class="panel-badge" style="font-size: 0.6875rem; letter-spacing: 0.05em; color: var(--accent-amber); border: 1px solid rgba(210, 153, 34, 0.4); padding: 2px 6px; border-radius: 2px;">PRESET RUNNER // 25 DSA ALGORITHMS</span>
+                        <div class="panel-header-left">
+                            <span class="panel-title">Source Script // Python</span>
+                            <span class="panel-badge panel-badge-custom">CUSTOM CODE PLAYGROUND</span>
+                        </div>
+                        <div class="panel-header-right">
+                            <span id="syntax-status-badge" class="syntax-badge syntax-badge-idle">SYNTAX // READY</span>
+                        </div>
                     </div>
                     <div class="panel-body">
                         <div class="editor-controls">
-                            <select id="preset-select" class="preset-select" aria-label="Algorithm Preset Selector">
-                                <option value="" selected>Load Algorithm Preset...</option>
-                                <optgroup label="Two Pointers">
-                                    <option value="two_pointer_palindrome">1. Palindrome Check</option>
-                                    <option value="two_sum_sorted">2. Two Sum on Sorted Array</option>
-                                    <option value="reverse_array">3. Reverse Array</option>
-                                    <option value="remove_duplicates">4. Remove Duplicates from Sorted Array</option>
-                                    <option value="move_zeroes">5. Move Zeroes</option>
-                                    <option value="container_most_water">6. Container With Most Water</option>
-                                </optgroup>
-                                <optgroup label="Sliding Window">
-                                    <option value="max_sum_subarray">7. Maximum Sum Subarray</option>
-                                    <option value="min_length_subarray">8. Minimum-Length Subarray</option>
-                                    <option value="longest_substr_no_repeat">9. Longest Substring Without Repeating Characters</option>
-                                    <option value="fixed_window_average">10. Fixed-Size Window Average</option>
-                                </optgroup>
-                                <optgroup label="Searching and Arrays">
-                                    <option value="linear_search">11. Linear Search</option>
-                                    <option value="binary_search">12. Binary Search</option>
-                                    <option value="sentinel_search">13. Sentinel Linear Search</option>
-                                    <option value="prefix_sums">14. Prefix Sums</option>
-                                    <option value="frequency_counting">15. Frequency Counting</option>
-                                </optgroup>
-                                <optgroup label="Sorting">
-                                    <option value="bubble_sort">16. Bubble Sort</option>
-                                    <option value="selection_sort">17. Selection Sort</option>
-                                    <option value="insertion_sort">18. Insertion Sort</option>
-                                    <option value="merge_sort">19. Merge Sort</option>
-                                </optgroup>
-                                <optgroup label="Matrices">
-                                    <option value="matrix_traversal">20. Nested Matrix Traversal</option>
-                                    <option value="matrix_row_sums">21. Row Sums</option>
-                                    <option value="matrix_col_sums">22. Column Sums</option>
-                                    <option value="matrix_diagonal">23. Diagonal Traversal</option>
-                                </optgroup>
-                                <optgroup label="Stacks, Queues, and Recursion">
-                                    <option value="stack_queue_ops">24. Stack and Queue Operations</option>
-                                    <option value="factorial_fibonacci">25. Factorial and Fibonacci Recursion</option>
-                                </optgroup>
-                            </select>
-                            <button type="button" id="btn-run" class="btn btn-primary" aria-label="Run and Trace">
+                            <button type="button" id="btn-run" class="btn btn-primary" aria-label="Visualize Code">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                                     <polygon points="6 4 20 12 6 20 6 4" />
                                 </svg>
-                                <span>Run &amp; Trace</span>
+                                <span>Visualize Code</span>
                             </button>
+                            <button type="button" id="btn-reset-example" class="btn btn-secondary" aria-label="Reset Example Code">Reset Example</button>
                             <button type="button" id="btn-clear" class="btn btn-secondary" aria-label="Clear Code Editor">Clear</button>
+
+                            <div class="examples-dropdown-wrapper">
+                                <select id="preset-select" class="preset-select" aria-label="Explore Examples (25 DSA Problems)">
+                                    <option value="" selected>Explore Examples (25 Problems)...</option>
+                                    <optgroup label="Two Pointers">
+                                        <option value="two_pointer_palindrome">1. Palindrome Check</option>
+                                        <option value="two_sum_sorted">2. Two Sum on Sorted Array</option>
+                                        <option value="reverse_array">3. Reverse Array</option>
+                                        <option value="remove_duplicates">4. Remove Duplicates from Sorted Array</option>
+                                        <option value="move_zeroes">5. Move Zeroes</option>
+                                        <option value="container_most_water">6. Container With Most Water</option>
+                                    </optgroup>
+                                    <optgroup label="Sliding Window">
+                                        <option value="max_sum_subarray">7. Maximum Sum Subarray</option>
+                                        <option value="min_length_subarray">8. Minimum-Length Subarray</option>
+                                        <option value="longest_substr_no_repeat">9. Longest Substring Without Repeating Characters</option>
+                                        <option value="fixed_window_average">10. Fixed-Size Window Average</option>
+                                    </optgroup>
+                                    <optgroup label="Searching and Arrays">
+                                        <option value="linear_search">11. Linear Search</option>
+                                        <option value="binary_search">12. Binary Search</option>
+                                        <option value="sentinel_search">13. Sentinel Linear Search</option>
+                                        <option value="prefix_sums">14. Prefix Sums</option>
+                                        <option value="frequency_counting">15. Frequency Counting</option>
+                                    </optgroup>
+                                    <optgroup label="Sorting">
+                                        <option value="bubble_sort">16. Bubble Sort</option>
+                                        <option value="selection_sort">17. Selection Sort</option>
+                                        <option value="insertion_sort">18. Insertion Sort</option>
+                                        <option value="merge_sort">19. Merge Sort</option>
+                                    </optgroup>
+                                    <optgroup label="Matrices">
+                                        <option value="matrix_traversal">20. Nested Matrix Traversal</option>
+                                        <option value="matrix_row_sums">21. Row Sums</option>
+                                        <option value="matrix_col_sums">22. Column Sums</option>
+                                        <option value="matrix_diagonal">23. Diagonal Traversal</option>
+                                    </optgroup>
+                                    <optgroup label="Stacks, Queues, and Recursion">
+                                        <option value="stack_queue_ops">24. Stack and Queue Operations</option>
+                                        <option value="factorial_fibonacci">25. Factorial and Fibonacci Recursion</option>
+                                    </optgroup>
+                                </select>
+                            </div>
+
                             <span id="trace-status" class="status-badge" role="status">IDLE // AWAITING INPUT</span>
                         </div>
+
+                        <!-- Inline Validation Feedback Bar -->
+                        <div id="validation-banner" class="validation-banner" style="display: none;" role="alert">
+                            <span class="validation-icon">!</span>
+                            <span id="validation-message" class="validation-message"></span>
+                        </div>
+
                         <div class="editor-wrapper">
                             <div id="editor-gutter" class="editor-gutter" aria-hidden="true"></div>
                             <div class="editor-workspace">
                                 <div id="editor-highlight-layer" class="editor-highlight-layer" aria-hidden="true">
                                     <div id="editor-active-line" class="editor-active-line"></div>
                                 </div>
-                                <textarea id="code-input" class="code-textarea" spellcheck="false" placeholder="# Select an algorithm preset above to inspect and trace..." readonly></textarea>
+                                <textarea id="code-input" class="code-textarea" spellcheck="false" placeholder="# Write or paste custom Python code here, or select an example above..."></textarea>
                             </div>
                         </div>
                     </div>
@@ -213,6 +233,10 @@
         </footer>
     </div>
     <canvas id="diwali-canvas" class="diwali-canvas" aria-hidden="true"></canvas>
+    <script src="{{ url_for('static', filename='vendor/codemirror/codemirror.min.js') }}?v=1.1.0"></script>
+    <script src="{{ url_for('static', filename='vendor/codemirror/python.min.js') }}?v=1.1.0"></script>
+    <script src="{{ url_for('static', filename='vendor/codemirror/matchbrackets.min.js') }}?v=1.1.0"></script>
+    <script src="{{ url_for('static', filename='vendor/codemirror/closebrackets.min.js') }}?v=1.1.0"></script>
     <script src="{{ url_for('static', filename='js/presets.js') }}?v=1.1.0"></script>
     <script src="{{ url_for('static', filename='js/spark.js') }}?v=1.1.0"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}?v=1.1.0"></script>
