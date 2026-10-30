@@ -220,6 +220,46 @@ runaway()
         self.assertIsNotNone(result["error"])
         self.assertEqual(result["error"]["type"], "RecursionError")
 
+    def test_operation_aware_tracing(self):
+        """
+        Verifies that tracer detects operations: swaps, comparisons, shifts, and mutations.
+        """
+        code = """
+arr = [5, 1, 4]
+if arr[0] > arr[1]:
+    arr[0], arr[1] = arr[1], arr[0]
+arr[2] = 99
+"""
+        result = self.tracer.run_trace(code)
+        self.assertEqual(result["status"], "completed")
+
+        all_ops = []
+        for step in result["steps"]:
+            ops = step.get("operations", [])
+            all_ops.extend(ops)
+
+        # Check comparison detection
+        comparisons = [op for op in all_ops if op.get("type") == "comparison"]
+        self.assertTrue(len(comparisons) > 0, "Tracer should detect comparisons on active line")
+        self.assertEqual(comparisons[0]["sequence"], "arr")
+        self.assertEqual(comparisons[0]["indices"], [0, 1])
+
+        # Check swap detection
+        swaps = [op for op in all_ops if op.get("type") == "swap"]
+        self.assertTrue(len(swaps) > 0, "Tracer should detect tuple swap between arr[0] and arr[1]")
+        self.assertEqual(swaps[0]["sequence"], "arr")
+        self.assertEqual(swaps[0]["indices"], [0, 1])
+        self.assertEqual(swaps[0]["from_values"], [5, 1])
+        self.assertEqual(swaps[0]["to_values"], [1, 5])
+
+        # Check mutation detection
+        mutations = [op for op in all_ops if op.get("type") == "mutation"]
+        self.assertTrue(len(mutations) > 0, "Tracer should detect mutation on arr[2]")
+        self.assertEqual(mutations[0]["sequence"], "arr")
+        self.assertEqual(mutations[0]["index"], 2)
+        self.assertEqual(mutations[0]["from_value"], 4)
+        self.assertEqual(mutations[0]["to_value"], 99)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -197,6 +197,142 @@ def detect_pointers(
     return pointers
 
 
+def eval_ast_index(node: ast.AST, locals_dict: Dict[str, Any]) -> Optional[int]:
+    """
+    Safely evaluate subscript index expressions from AST using local variables.
+    Supports constant numbers, integer variable names, unary negation, and simple addition/subtraction.
+    """
+    try:
+        if isinstance(node, ast.Constant):
+            return node.value if isinstance(node.value, int) and not isinstance(node.value, bool) else None
+        if isinstance(node, ast.Name):
+            val = locals_dict.get(node.id)
+            return val if isinstance(val, int) and not isinstance(val, bool) else None
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+            val = eval_ast_index(node.operand, locals_dict)
+            return -val if val is not None else None
+        if isinstance(node, ast.BinOp):
+            left = eval_ast_index(node.left, locals_dict)
+            right = eval_ast_index(node.right, locals_dict)
+            if left is not None and right is not None:
+                if isinstance(node.op, ast.Add):
+                    return left + right
+                if isinstance(node.op, ast.Sub):
+                    return left - right
+    except Exception:
+        return None
+    return None
+
+
+def detect_operations(
+    prev_sequences: Dict[str, Dict[str, Any]],
+    curr_sequences: Dict[str, Dict[str, Any]],
+    ast_compares: List[ast.Compare],
+    raw_locals: Dict[str, Any]
+) -> List[Dict[str, Any]]:
+    """
+    Detect explicit sequence operations (swaps, comparisons, shifts, mutations)
+    to power physics-inspired animations in the frontend.
+    """
+    operations: List[Dict[str, Any]] = []
+    seen_ops = set()
+
+    # 1. Comparison detection on active line
+    for comp in ast_compares:
+        try:
+            left_seq = None
+            idx1 = None
+            if isinstance(comp.left, ast.Subscript) and isinstance(comp.left.value, ast.Name):
+                left_seq = comp.left.value.id
+                idx1 = eval_ast_index(comp.left.slice, raw_locals)
+
+            for comparator in comp.comparators:
+                right_seq = None
+                idx2 = None
+                if isinstance(comparator, ast.Subscript) and isinstance(comparator.value, ast.Name):
+                    right_seq = comparator.value.id
+                    idx2 = eval_ast_index(comparator.slice, raw_locals)
+
+                # Case 1: Both elements from the same sequence (e.g. arr[i] < arr[j])
+                if left_seq and right_seq and left_seq == right_seq and idx1 is not None and idx2 is not None:
+                    op_key = f"comp:{left_seq}:{min(idx1, idx2)}:{max(idx1, idx2)}"
+                    if op_key not in seen_ops:
+                        seen_ops.add(op_key)
+                        operations.append({
+                            "type": "comparison",
+                            "sequence": left_seq,
+                            "indices": [idx1, idx2]
+                        })
+                # Case 2: One element compared with a scalar or variable (e.g. arr[mid] == target)
+                elif left_seq and idx1 is not None and not right_seq:
+                    op_key = f"comp:{left_seq}:{idx1}"
+                    if op_key not in seen_ops:
+                        seen_ops.add(op_key)
+                        operations.append({
+                            "type": "comparison",
+                            "sequence": left_seq,
+                            "indices": [idx1]
+                        })
+                elif right_seq and idx2 is not None and not left_seq:
+                    op_key = f"comp:{right_seq}:{idx2}"
+                    if op_key not in seen_ops:
+                        seen_ops.add(op_key)
+                        operations.append({
+                            "type": "comparison",
+                            "sequence": right_seq,
+                            "indices": [idx2]
+                        })
+        except Exception:
+            pass
+
+    # 2. Sequence state diffing (swap, shift, mutation)
+    for seq_name, curr_info in curr_sequences.items():
+        if seq_name in prev_sequences:
+            prev_info = prev_sequences[seq_name]
+            prev_elem = prev_info.get("elements", [])
+            curr_elem = curr_info.get("elements", [])
+
+            if prev_elem != curr_elem and len(prev_elem) == len(curr_elem):
+                diffs = [i for i in range(len(prev_elem)) if prev_elem[i] != curr_elem[i]]
+                if len(diffs) == 2:
+                    i, j = diffs[0], diffs[1]
+                    if prev_elem[i] == curr_elem[j] and prev_elem[j] == curr_elem[i]:
+                        operations.append({
+                            "type": "swap",
+                            "sequence": seq_name,
+                            "indices": [i, j],
+                            "from_values": [prev_elem[i], prev_elem[j]],
+                            "to_values": [curr_elem[i], curr_elem[j]]
+                        })
+                    else:
+                        operations.append({
+                            "type": "mutation",
+                            "sequence": seq_name,
+                            "indices": [i, j],
+                            "from_values": [prev_elem[i], prev_elem[j]],
+                            "to_values": [curr_elem[i], curr_elem[j]]
+                        })
+                elif len(diffs) == 1:
+                    i = diffs[0]
+                    operations.append({
+                        "type": "mutation",
+                        "sequence": seq_name,
+                        "index": i,
+                        "from_value": prev_elem[i],
+                        "to_value": curr_elem[i]
+                    })
+                elif len(diffs) > 2:
+                    operations.append({
+                        "type": "shift",
+                        "sequence": seq_name,
+                        "indices": diffs,
+                        "from_values": [prev_elem[k] for k in diffs],
+                        "to_values": [curr_elem[k] for k in diffs]
+                    })
+
+    return operations
+
+
 class ExecutionTracer:
     """
     Deterministic runtime interception engine.
@@ -212,6 +348,8 @@ class ExecutionTracer:
         self.start_time = 0.0
         self.stdout_buffer = io.StringIO()
         self.last_locals: Dict[str, Any] = {}
+        self.last_sequences: Dict[str, Dict[str, Any]] = {}
+        self.ast_compares_by_line: Dict[int, List[ast.Compare]] = {}
         self.user_filename = "<user_code>"
         self.aborted = False
         self.abort_reason: Optional[str] = None
@@ -269,6 +407,11 @@ class ExecutionTracer:
         active_sequences = extract_sequences(raw_locals)
         active_pointers = detect_pointers(raw_locals, active_sequences)
 
+        # Detect operations: comparisons, swaps, shifts, mutations
+        compares_on_line = self.ast_compares_by_line.get(line_no, [])
+        operations = detect_operations(self.last_sequences, active_sequences, compares_on_line, raw_locals)
+        self.last_sequences = copy.deepcopy(active_sequences)
+
         # Capture incremental stdout generated up to this point (bounded by max_stdout_chars)
         current_stdout = self.stdout_buffer.getvalue()
         if len(current_stdout) > self.max_stdout_chars:
@@ -284,6 +427,7 @@ class ExecutionTracer:
             "mutations": mutations,
             "sequences": active_sequences,
             "pointers": active_pointers,
+            "operations": operations,
             "stdout": current_stdout
         }
 
@@ -308,11 +452,21 @@ class ExecutionTracer:
         self.steps = []
         self.step_count = 0
         self.last_locals = {}
+        self.last_sequences = {}
+        self.ast_compares_by_line = {}
         self.aborted = False
         self.abort_reason = None
         self.stdout_buffer = io.StringIO()
 
-        # Phase A: AST Syntax Validation
+        # Phase A: AST Syntax Validation and Comparison Node Indexing
+        try:
+            tree = ast.parse(code_str)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Compare):
+                    self.ast_compares_by_line.setdefault(node.lineno, []).append(node)
+        except Exception:
+            self.ast_compares_by_line = {}
+
         try:
             compiled_code = compile(code_str, self.user_filename, "exec")
         except SyntaxError as syn_err:

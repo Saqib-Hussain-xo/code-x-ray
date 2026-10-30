@@ -846,7 +846,8 @@ a:focus-visible {
     flex-direction: column;
     overflow-x: auto;
     max-width: 100%;
-    padding: 2px 4px 6px 4px;
+    padding: 24px 6px 8px 6px;
+    margin-top: -10px;
 }
 
 .sequence-track-inner {
@@ -1256,7 +1257,33 @@ a:focus-visible {
 }
 
 .memory-block-cell {
-    transition: border-color var(--anim-duration) ease, background-color var(--anim-duration) ease, transform var(--anim-duration) ease;
+    position: relative;
+    will-change: transform;
+    transition: border-color var(--anim-duration) ease, background-color var(--anim-duration) ease, transform var(--anim-duration) ease, box-shadow var(--anim-duration) ease;
+}
+
+.memory-block-cell.cell-comparing {
+    border-color: #58a6ff;
+    background-color: rgba(88, 166, 255, 0.16);
+    transform: translateY(-4px);
+    box-shadow: 0 0 10px rgba(88, 166, 255, 0.35);
+    z-index: 5;
+}
+
+.memory-block-cell.cell-swap-active {
+    position: relative;
+    will-change: transform;
+    pointer-events: none;
+}
+
+.memory-block-cell.cell-settling {
+    animation: cellSettle 180ms ease forwards;
+}
+
+@keyframes cellSettle {
+    0% { transform: scale(1.04); }
+    50% { transform: scale(0.97); }
+    100% { transform: scale(1); }
 }
 
 .memory-block-cell.anim-pulse-mutation {

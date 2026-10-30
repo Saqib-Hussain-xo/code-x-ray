@@ -282,14 +282,21 @@ class TestFrontendIntegration(unittest.TestCase):
         self.assertIn("cancelAnimations", anim_js)
         self.assertIn("prefers-reduced-motion", anim_js)
         self.assertIn("translateX", anim_js)
+        self.assertIn("animateSwap", anim_js)
+        self.assertIn("getSwapDuration", anim_js)
+        self.assertIn("cell-comparing", anim_js)
+        self.assertIn("cell-swap-active", anim_js)
+        self.assertIn("cell-settling", anim_js)
 
-        # 3. App.js animation lifecycle integration
+        # 3. App.js animation lifecycle and DOM persistence integration
         res_app = self.client.get("/static/js/app.js")
         self.assertEqual(res_app.status_code, 200)
         app_js = res_app.data.decode("utf-8")
         self.assertIn("XRayAnimator.beforeStepRender", app_js)
         self.assertIn("XRayAnimator.afterStepRender", app_js)
         self.assertIn("XRayAnimator.cancelAnimations", app_js)
+        self.assertIn("data-seq-name", app_js)
+        self.assertIn("canReuse", app_js)
 
         # 4. CSS animation rules and reduced motion support
         res_css = self.client.get("/static/css/styles.css")
@@ -300,6 +307,9 @@ class TestFrontendIntegration(unittest.TestCase):
         self.assertIn("blockMutatePulse", css)
         self.assertIn("row-enter", css)
         self.assertIn("prefers-reduced-motion", css)
+        self.assertIn("cell-comparing", css)
+        self.assertIn("cell-settling", css)
+        self.assertIn("cellSettle", css)
 
 
 if __name__ == "__main__":

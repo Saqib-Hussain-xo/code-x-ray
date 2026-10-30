@@ -461,15 +461,15 @@ print("Is palindrome:", result)
     function renderStep(stepIndex) {
         if (!traceData || !traceData.steps || traceData.steps.length === 0) return;
 
-        if (window.XRayAnimator && window.XRayAnimator.beforeStepRender) {
-            window.XRayAnimator.beforeStepRender();
-        }
-
         stepIndex = Math.max(0, Math.min(stepIndex, traceData.steps.length - 1));
-        currentStepIndex = stepIndex;
-
         const step = traceData.steps[stepIndex];
         const prevStep = (stepIndex > 0) ? traceData.steps[stepIndex - 1] : null;
+
+        if (window.XRayAnimator && window.XRayAnimator.beforeStepRender) {
+            window.XRayAnimator.beforeStepRender(step, prevStep);
+        }
+
+        currentStepIndex = stepIndex;
 
         // 6A. Update Transport Navigation Controls
         if (timelineScrubber) timelineScrubber.value = String(stepIndex);
@@ -615,6 +615,111 @@ print("Is palindrome:", result)
     }
 
     // 6D. Sub-renderer: Sequence & Pointer Stage
+    function createSequenceContainer(seq, seqPointers, isSeqMutated) {
+        // Container for this individual sequence
+        const seqBox = document.createElement("div");
+        seqBox.className = "sequence-container";
+        seqBox.setAttribute("data-seq-name", seq.name);
+
+        // Row A: Sequence Label Row (explicit margin-bottom separation)
+        const labelRow = document.createElement("div");
+        labelRow.className = "sequence-label-row";
+
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "seq-label-name";
+        nameSpan.textContent = seq.name;
+
+        const typeSpan = document.createElement("span");
+        typeSpan.className = "seq-label-type";
+        typeSpan.textContent = seq.type;
+
+        const lenSpan = document.createElement("span");
+        lenSpan.className = "seq-label-len";
+        lenSpan.textContent = `[${seq.length}]`;
+
+        labelRow.appendChild(nameSpan);
+        labelRow.appendChild(typeSpan);
+        labelRow.appendChild(lenSpan);
+        seqBox.appendChild(labelRow);
+
+        // Row B: Horizontal Scrolling Track for Elements and Indices
+        const track = document.createElement("div");
+        track.className = "sequence-cells-track";
+
+        const trackInner = document.createElement("div");
+        trackInner.className = "sequence-track-inner";
+
+        // Sub-row 1: Indices
+        const indicesRow = document.createElement("div");
+        indicesRow.className = "sequence-indices-row";
+
+        // Sub-row 2: Memory Block Cells
+        const blocksRow = document.createElement("div");
+        blocksRow.className = "sequence-blocks-row";
+
+        // Sub-row 3: Pointer Slots
+        const pointersRow = document.createElement("div");
+        pointersRow.className = "sequence-pointers-row";
+
+        const elements = Array.isArray(seq.elements) ? seq.elements : [];
+
+        for (let idx = 0; idx < seq.length; idx++) {
+            const matchedPtrs = seqPointers.filter(p => p.value === idx);
+
+            // Index Cell
+            const idxCell = document.createElement("div");
+            idxCell.className = "sequence-index-cell";
+            idxCell.textContent = String(idx);
+            if (matchedPtrs.length > 0) {
+                idxCell.classList.add("index-active");
+            }
+            indicesRow.appendChild(idxCell);
+
+            // Memory Block Cell
+            const blockCell = document.createElement("div");
+            blockCell.className = "memory-block-cell";
+            blockCell.setAttribute("data-index", String(idx));
+            blockCell.textContent = formatCellValue(elements[idx]);
+
+            if (isSeqMutated) {
+                blockCell.classList.add("cell-mutated");
+            }
+
+            if (matchedPtrs.length > 0) {
+                const hasPtrA = matchedPtrs.some(p => p.name === "left" || p.name === "i" || p.name === "start" || p.name === "slow");
+                if (hasPtrA) {
+                    blockCell.classList.add("cell-pointer-a");
+                } else {
+                    blockCell.classList.add("cell-pointer-b");
+                }
+            }
+            blocksRow.appendChild(blockCell);
+
+            // Pointer Slot
+            const ptrSlot = document.createElement("div");
+            ptrSlot.className = "pointer-slot";
+
+            for (let pi = 0; pi < matchedPtrs.length; pi++) {
+                const ptr = matchedPtrs[pi];
+                const ptrIndicator = document.createElement("span");
+                const isA = (ptr.name === "left" || ptr.name === "i" || ptr.name === "start" || ptr.name === "slow" || pi === 0);
+                ptrIndicator.className = `pointer-indicator ${isA ? "ptr-a" : "ptr-b"}`;
+                ptrIndicator.textContent = ptr.name;
+                ptrIndicator.setAttribute("data-ptr-name", ptr.name);
+                ptrSlot.appendChild(ptrIndicator);
+            }
+            pointersRow.appendChild(ptrSlot);
+        }
+
+        trackInner.appendChild(indicesRow);
+        trackInner.appendChild(blocksRow);
+        trackInner.appendChild(pointersRow);
+        track.appendChild(trackInner);
+        seqBox.appendChild(track);
+
+        return seqBox;
+    }
+
     function renderSequenceStage(step) {
         if (!sequencesContainer || !stageEmpty) return;
 
@@ -628,7 +733,15 @@ print("Is palindrome:", result)
         }
 
         stageEmpty.style.display = "none";
-        sequencesContainer.replaceChildren();
+
+        // Remove obsolete sequence containers
+        const existingBoxes = Array.from(sequencesContainer.querySelectorAll(".sequence-container"));
+        for (const box of existingBoxes) {
+            const name = box.getAttribute("data-seq-name");
+            if (!seqNames.includes(name)) {
+                box.remove();
+            }
+        }
 
         const allPointers = Array.isArray(step.pointers) ? step.pointers : [];
         const mutations = Array.isArray(step.mutations) ? step.mutations : [];
@@ -637,109 +750,93 @@ print("Is palindrome:", result)
             const seq = sequences[seqName];
             const seqPointers = allPointers.filter(p => p.target === seqName);
             const isSeqMutated = mutations.includes(seqName);
-
-            // Container for this individual sequence
-            const seqBox = document.createElement("div");
-            seqBox.className = "sequence-container";
-
-            // Row A: Sequence Label Row (explicit margin-bottom separation)
-            const labelRow = document.createElement("div");
-            labelRow.className = "sequence-label-row";
-
-            const nameSpan = document.createElement("span");
-            nameSpan.className = "seq-label-name";
-            nameSpan.textContent = seq.name;
-
-            const typeSpan = document.createElement("span");
-            typeSpan.className = "seq-label-type";
-            typeSpan.textContent = seq.type;
-
-            const lenSpan = document.createElement("span");
-            lenSpan.className = "seq-label-len";
-            lenSpan.textContent = `[${seq.length}]`;
-
-            labelRow.appendChild(nameSpan);
-            labelRow.appendChild(typeSpan);
-            labelRow.appendChild(lenSpan);
-            seqBox.appendChild(labelRow);
-
-            // Row B: Horizontal Scrolling Track for Elements and Indices
-            const track = document.createElement("div");
-            track.className = "sequence-cells-track";
-
-            const trackInner = document.createElement("div");
-            trackInner.className = "sequence-track-inner";
-
-            // Sub-row 1: Indices
-            const indicesRow = document.createElement("div");
-            indicesRow.className = "sequence-indices-row";
-
-            // Sub-row 2: Memory Block Cells
-            const blocksRow = document.createElement("div");
-            blocksRow.className = "sequence-blocks-row";
-
-            // Sub-row 3: Pointer Slots
-            const pointersRow = document.createElement("div");
-            pointersRow.className = "sequence-pointers-row";
-
             const elements = Array.isArray(seq.elements) ? seq.elements : [];
 
-            for (let idx = 0; idx < seq.length; idx++) {
-                // Find pointers currently pointing to this index
-                const matchedPtrs = seqPointers.filter(p => p.value === idx);
+            const existingBox = sequencesContainer.querySelector(`.sequence-container[data-seq-name="${seqName}"]`);
+            let canReuse = false;
 
-                // Index Cell
-                const idxCell = document.createElement("div");
-                idxCell.className = "sequence-index-cell";
-                idxCell.textContent = String(idx);
-                if (matchedPtrs.length > 0) {
-                    idxCell.classList.add("index-active");
+            if (existingBox) {
+                const blocksRow = existingBox.querySelector(".sequence-blocks-row");
+                if (blocksRow && blocksRow.children.length === seq.length) {
+                    canReuse = true;
                 }
-                indicesRow.appendChild(idxCell);
-
-                // Memory Block Cell
-                const blockCell = document.createElement("div");
-                blockCell.className = "memory-block-cell";
-                blockCell.textContent = formatCellValue(elements[idx]);
-
-                if (isSeqMutated) {
-                    blockCell.classList.add("cell-mutated");
-                }
-
-                if (matchedPtrs.length > 0) {
-                    // Check if pointer A or B
-                    const hasPtrA = matchedPtrs.some(p => p.name === "left" || p.name === "i" || p.name === "start" || p.name === "slow");
-                    if (hasPtrA) {
-                        blockCell.classList.add("cell-pointer-a");
-                    } else {
-                        blockCell.classList.add("cell-pointer-b");
-                    }
-                }
-                blocksRow.appendChild(blockCell);
-
-                // Pointer Slot
-                const ptrSlot = document.createElement("div");
-                ptrSlot.className = "pointer-slot";
-
-                for (let pi = 0; pi < matchedPtrs.length; pi++) {
-                    const ptr = matchedPtrs[pi];
-                    const ptrIndicator = document.createElement("span");
-                    // Alternate between green (ptr-a) and blue (ptr-b) based on convention
-                    const isA = (ptr.name === "left" || ptr.name === "i" || ptr.name === "start" || ptr.name === "slow" || pi === 0);
-                    ptrIndicator.className = `pointer-indicator ${isA ? "ptr-a" : "ptr-b"}`;
-                    ptrIndicator.textContent = ptr.name;
-                    ptrSlot.appendChild(ptrIndicator);
-                }
-                pointersRow.appendChild(ptrSlot);
             }
 
-            trackInner.appendChild(indicesRow);
-            trackInner.appendChild(blocksRow);
-            trackInner.appendChild(pointersRow);
-            track.appendChild(trackInner);
-            seqBox.appendChild(track);
+            if (canReuse) {
+                // Update in-place to preserve DOM element stability and prevent flickering
+                const labelRow = existingBox.querySelector(".sequence-label-row");
+                if (labelRow) {
+                    const nameSpan = labelRow.querySelector(".seq-label-name");
+                    const typeSpan = labelRow.querySelector(".seq-label-type");
+                    const lenSpan = labelRow.querySelector(".seq-label-len");
+                    if (nameSpan) nameSpan.textContent = seq.name;
+                    if (typeSpan) typeSpan.textContent = seq.type;
+                    if (lenSpan) lenSpan.textContent = `[${seq.length}]`;
+                }
 
-            sequencesContainer.appendChild(seqBox);
+                const indicesRow = existingBox.querySelector(".sequence-indices-row");
+                const blocksRow = existingBox.querySelector(".sequence-blocks-row");
+                const pointersRow = existingBox.querySelector(".sequence-pointers-row");
+
+                for (let idx = 0; idx < seq.length; idx++) {
+                    const matchedPtrs = seqPointers.filter(p => p.value === idx);
+
+                    // Update Index Cell
+                    const idxCell = indicesRow.children[idx];
+                    if (idxCell) {
+                        idxCell.textContent = String(idx);
+                        if (matchedPtrs.length > 0) {
+                            idxCell.classList.add("index-active");
+                        } else {
+                            idxCell.classList.remove("index-active");
+                        }
+                    }
+
+                    // Update Block Cell
+                    const blockCell = blocksRow.children[idx];
+                    if (blockCell) {
+                        const formattedVal = formatCellValue(elements[idx]);
+                        if (blockCell.textContent !== formattedVal) {
+                            blockCell.textContent = formattedVal;
+                        }
+                        // Reset transient classes cleanly
+                        blockCell.className = "memory-block-cell";
+                        if (isSeqMutated) {
+                            blockCell.classList.add("cell-mutated");
+                        }
+                        if (matchedPtrs.length > 0) {
+                            const hasPtrA = matchedPtrs.some(p => p.name === "left" || p.name === "i" || p.name === "start" || p.name === "slow");
+                            if (hasPtrA) {
+                                blockCell.classList.add("cell-pointer-a");
+                            } else {
+                                blockCell.classList.add("cell-pointer-b");
+                            }
+                        }
+                    }
+
+                    // Update Pointer Slot
+                    const ptrSlot = pointersRow.children[idx];
+                    if (ptrSlot) {
+                        ptrSlot.replaceChildren();
+                        for (let pi = 0; pi < matchedPtrs.length; pi++) {
+                            const ptr = matchedPtrs[pi];
+                            const ptrIndicator = document.createElement("span");
+                            const isA = (ptr.name === "left" || ptr.name === "i" || ptr.name === "start" || ptr.name === "slow" || pi === 0);
+                            ptrIndicator.className = `pointer-indicator ${isA ? "ptr-a" : "ptr-b"}`;
+                            ptrIndicator.textContent = ptr.name;
+                            ptrIndicator.setAttribute("data-ptr-name", ptr.name);
+                            ptrSlot.appendChild(ptrIndicator);
+                        }
+                    }
+                }
+            } else {
+                const newSeqBox = createSequenceContainer(seq, seqPointers, isSeqMutated);
+                if (existingBox) {
+                    existingBox.replaceWith(newSeqBox);
+                } else {
+                    sequencesContainer.appendChild(newSeqBox);
+                }
+            }
         }
     }
 
