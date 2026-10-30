@@ -461,6 +461,10 @@ print("Is palindrome:", result)
     function renderStep(stepIndex) {
         if (!traceData || !traceData.steps || traceData.steps.length === 0) return;
 
+        if (window.XRayAnimator && window.XRayAnimator.beforeStepRender) {
+            window.XRayAnimator.beforeStepRender();
+        }
+
         stepIndex = Math.max(0, Math.min(stepIndex, traceData.steps.length - 1));
         currentStepIndex = stepIndex;
 
@@ -487,6 +491,10 @@ print("Is palindrome:", result)
 
         // 6E. Synchronize Console Output
         renderConsole(step);
+
+        if (window.XRayAnimator && window.XRayAnimator.afterStepRender) {
+            window.XRayAnimator.afterStepRender(step, prevStep, stepIndex < currentStepIndex);
+        }
 
         // 6F. Trigger Diwali Celebration Spark if final step reached on completed execution
         if (stepIndex === traceData.total_steps - 1 && traceData.status === "completed") {
@@ -1062,6 +1070,7 @@ print("Is palindrome:", result)
             btnFirst.addEventListener("click", function () {
                 pause();
                 if (window.stopDiwaliSpark) window.stopDiwaliSpark();
+                if (window.XRayAnimator && window.XRayAnimator.cancelAnimations) window.XRayAnimator.cancelAnimations();
                 goToStep(0);
             });
         }
@@ -1091,6 +1100,7 @@ print("Is palindrome:", result)
         if (btnLast) {
             btnLast.addEventListener("click", function () {
                 pause();
+                if (window.XRayAnimator && window.XRayAnimator.cancelAnimations) window.XRayAnimator.cancelAnimations();
                 if (traceData) goToStep(traceData.total_steps - 1);
             });
         }
@@ -1100,6 +1110,7 @@ print("Is palindrome:", result)
             timelineScrubber.addEventListener("input", function () {
                 pause();
                 if (window.stopDiwaliSpark) window.stopDiwaliSpark();
+                if (window.XRayAnimator && window.XRayAnimator.cancelAnimations) window.XRayAnimator.cancelAnimations();
                 const step = parseInt(timelineScrubber.value, 10);
                 if (!isNaN(step)) {
                     goToStep(step);
@@ -1159,6 +1170,10 @@ print("Is palindrome:", result)
         initPresets();
         initEvents();
         initCodeMirror();
+
+        if (window.XRayAnimator && window.XRayAnimator.init) {
+            window.XRayAnimator.init();
+        }
 
         // Populate Custom Code Playground with default introductory example
         setEditorCode(DEFAULT_PYTHON_EXAMPLE);

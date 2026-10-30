@@ -46,6 +46,10 @@
     --pad-grid: 12px;
     --header-height: 46px;
     --transport-height: 52px;
+
+    /* Animation System */
+    --anim-duration: 220ms;
+    --anim-ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
 /* Global Reset & Base */
@@ -1229,4 +1233,127 @@ a:focus-visible {
 .diwali-banner.diwali-banner-visible {
     opacity: 1;
     transform: translateX(-50%) translateY(0);
+}
+
+/* 5. Phase 2 Animation System */
+.pointer-indicator {
+    will-change: transform;
+}
+
+.pointer-indicator.pointer-enter {
+    animation: pointerEnter var(--anim-duration) cubic-bezier(0, 0, 0.2, 1) forwards;
+}
+
+@keyframes pointerEnter {
+    from {
+        opacity: 0;
+        transform: translateY(4px) scale(0.85);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.memory-block-cell {
+    transition: border-color var(--anim-duration) ease, background-color var(--anim-duration) ease, transform var(--anim-duration) ease;
+}
+
+.memory-block-cell.anim-pulse-mutation {
+    animation: blockMutatePulse var(--anim-duration) ease;
+}
+
+@keyframes blockMutatePulse {
+    0% {
+        transform: scale(1.08);
+        box-shadow: 0 0 8px rgba(63, 185, 80, 0.4);
+    }
+    50% {
+        transform: scale(1.04);
+        box-shadow: 0 0 4px rgba(63, 185, 80, 0.2);
+    }
+    100% {
+        transform: scale(1);
+        box-shadow: none;
+    }
+}
+
+.sequence-container {
+    animation: seqFadeIn var(--anim-duration) ease forwards;
+}
+
+@keyframes seqFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(3px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.memory-table tbody tr {
+    transition: background-color var(--anim-duration) ease;
+}
+
+.memory-table tr.row-enter {
+    animation: rowEnter var(--anim-duration) ease forwards;
+}
+
+@keyframes rowEnter {
+    from {
+        opacity: 0;
+        transform: translateX(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.status-badge-inline {
+    transition: all var(--anim-duration) ease;
+}
+
+.status-badge-inline.mutated {
+    animation: badgePulse var(--anim-duration) ease;
+}
+
+@keyframes badgePulse {
+    0% {
+        transform: scale(0.92);
+        opacity: 0.7;
+    }
+    50% {
+        transform: scale(1.08);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.editor-active-line {
+    transition: top var(--anim-duration) cubic-bezier(0.2, 0, 0, 1);
+}
+
+.cm-active-line {
+    transition: background-color var(--anim-duration) ease, border-left-color var(--anim-duration) ease;
+}
+
+.cm-gutter-active .CodeMirror-linenumber {
+    transition: color var(--anim-duration) ease, border-left-color var(--anim-duration) ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --anim-duration: 0.001ms !important;
+    }
+    *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+    }
 }

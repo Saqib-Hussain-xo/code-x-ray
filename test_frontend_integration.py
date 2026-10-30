@@ -264,6 +264,43 @@ class TestFrontendIntegration(unittest.TestCase):
         self.assertIn(".validation-banner", css)
         self.assertIn(".panel-badge-custom", css)
 
+    def test_phase2_animation_system_contracts(self):
+        """Verify Phase 2 Unified Animation System script, styles, and lifecycle hooks."""
+        # 1. HTML script inclusion
+        res_html = self.client.get("/")
+        self.assertEqual(res_html.status_code, 200)
+        html = res_html.data.decode("utf-8")
+        self.assertIn("static/js/animator.js", html)
+
+        # 2. Animator script contracts
+        res_anim = self.client.get("/static/js/animator.js")
+        self.assertEqual(res_anim.status_code, 200)
+        anim_js = res_anim.data.decode("utf-8")
+        self.assertIn("window.XRayAnimator", anim_js)
+        self.assertIn("beforeStepRender", anim_js)
+        self.assertIn("afterStepRender", anim_js)
+        self.assertIn("cancelAnimations", anim_js)
+        self.assertIn("prefers-reduced-motion", anim_js)
+        self.assertIn("translateX", anim_js)
+
+        # 3. App.js animation lifecycle integration
+        res_app = self.client.get("/static/js/app.js")
+        self.assertEqual(res_app.status_code, 200)
+        app_js = res_app.data.decode("utf-8")
+        self.assertIn("XRayAnimator.beforeStepRender", app_js)
+        self.assertIn("XRayAnimator.afterStepRender", app_js)
+        self.assertIn("XRayAnimator.cancelAnimations", app_js)
+
+        # 4. CSS animation rules and reduced motion support
+        res_css = self.client.get("/static/css/styles.css")
+        self.assertEqual(res_css.status_code, 200)
+        css = res_css.data.decode("utf-8")
+        self.assertIn("--anim-duration", css)
+        self.assertIn("pointer-enter", css)
+        self.assertIn("blockMutatePulse", css)
+        self.assertIn("row-enter", css)
+        self.assertIn("prefers-reduced-motion", css)
+
 
 if __name__ == "__main__":
     unittest.main()
