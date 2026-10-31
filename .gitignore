@@ -43,3 +43,14 @@ ENV/
 # OS generated
 .DS_Store
 Thumbs.db
+
+# Local Impeccable state
+.impeccable/
+
+# Local acceptance audit artifacts
+audit_summary.json
+execute_acceptance_audit.py
+screenshot_*.png
+
+# Local agent transcripts
+X-Ray Execution Agent - Antigravity Transcript.md

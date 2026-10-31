@@ -94,9 +94,10 @@ class TestFrontendIntegration(unittest.TestCase):
         self.assertIn("width: max-content", css)
         self.assertIn("align-items: center", css)
 
-        # Transport Play button blue accent
+        # Transport Play button standardized dark slate styling
         self.assertIn(".btn-transport.btn-play", css)
-        self.assertIn("#1f6feb", css)
+        self.assertIn("background-color: #161b22", css)
+        self.assertIn(".btn-transport.btn-play.is-playing", css)
 
     def test_auto_playback_and_timer_guards_in_app_js(self):
         """Verify app.js auto-starts playback on successful trace and prevents timer overlap."""
@@ -163,25 +164,45 @@ class TestFrontendIntegration(unittest.TestCase):
         self.assertIn('MUTATED', app_js)
         self.assertIn('→', app_js)  # Transition arrow
 
-    def test_diwali_spark_canvas_and_script(self):
-        """Verify Diwali celebration canvas is loaded and spark controller is wired."""
+    def test_phase2_visual_consistency_contracts(self):
+        """Verify Phase 2 visual consistency: removal of Diwali fireworks, restrained status pulse, 2px borders, standardized Play button."""
         res_html = self.client.get("/")
         self.assertEqual(res_html.status_code, 200)
         html = res_html.data.decode("utf-8")
-        self.assertIn('id="diwali-canvas"', html)
-        self.assertIn('static/js/spark.js', html)
-
-        res_spark = self.client.get("/static/js/spark.js")
-        self.assertEqual(res_spark.status_code, 200)
-        spark_js = res_spark.data.decode("utf-8")
-        self.assertIn("triggerDiwaliSpark", spark_js)
-        self.assertIn("stopDiwaliSpark", spark_js)
+        # Ensure diwali canvas and spark.js are removed
+        self.assertNotIn('id="diwali-canvas"', html)
+        self.assertNotIn('spark.js', html)
 
         res_css = self.client.get("/static/css/styles.css")
         self.assertEqual(res_css.status_code, 200)
         css = res_css.data.decode("utf-8")
-        self.assertIn(".diwali-canvas", css)
-        self.assertIn(".diwali-banner", css)
+        # Ensure diwali canvas/banner styles are removed
+        self.assertNotIn(".diwali-canvas", css)
+        self.assertNotIn(".diwali-banner", css)
+
+        # Restrained emerald status pulse
+        self.assertIn(".status-badge.status-completed.status-completed-pulse", css)
+        self.assertIn("@keyframes statusEmeraldPulse", css)
+
+        # Standardized transport play styling with active emerald highlight
+        self.assertIn(".btn-transport.btn-play", css)
+        self.assertIn(".btn-transport.btn-play.is-playing", css)
+        self.assertIn("border-color: #3fb950", css)
+
+        # Refined 2px active and error editor indicators
+        self.assertIn(".cm-active-line", css)
+        self.assertIn("border-left: 2px solid #d29922", css)
+        self.assertIn(".cm-error-line", css)
+        self.assertIn("border-left: 2px solid #f85149", css)
+
+        # App.js execution complete handler
+        res_app = self.client.get("/static/js/app.js")
+        self.assertEqual(res_app.status_code, 200)
+        app_js = res_app.data.decode("utf-8")
+        self.assertIn("triggerExecutionComplete", app_js)
+        self.assertIn("status-completed-pulse", app_js)
+        self.assertNotIn("triggerDiwaliSpark", app_js)
+        self.assertNotIn("stopDiwaliSpark", app_js)
 
     def test_active_line_contrast_and_scroll_sync_contracts(self):
         """Verify active-line has unmistakable high contrast and JS synchronizes scroll offsets."""
@@ -191,10 +212,10 @@ class TestFrontendIntegration(unittest.TestCase):
 
         # Unmistakable amber active-line styling
         self.assertIn("rgba(210, 153, 34, 0.32)", css)
-        self.assertIn("border-left: 4px solid #d29922", css)
+        self.assertIn("border-left: 2px solid #d29922", css)
         self.assertIn("transparent !important", css)  # Textarea transparency guarantee
         self.assertIn(".gutter-line.gutter-active", css)
-        self.assertIn("border-left: 3px solid #d29922", css)
+        self.assertIn("border-left: 2px solid #d29922", css)
 
         res_js = self.client.get("/static/js/app.js")
         self.assertEqual(res_js.status_code, 200)
@@ -285,7 +306,8 @@ class TestFrontendIntegration(unittest.TestCase):
         self.assertIn("animateSwap", anim_js)
         self.assertIn("getSwapDuration", anim_js)
         self.assertIn("cell-comparing", anim_js)
-        self.assertIn("cell-swap-active", anim_js)
+        self.assertIn("ghost-projectile-cell", anim_js)
+        self.assertIn("sequence-animation-overlay", anim_js)
         self.assertIn("cell-settling", anim_js)
 
         # 3. App.js animation lifecycle and DOM persistence integration
@@ -310,6 +332,129 @@ class TestFrontendIntegration(unittest.TestCase):
         self.assertIn("cell-comparing", css)
         self.assertIn("cell-settling", css)
         self.assertIn("cellSettle", css)
+        self.assertIn("sequence-animation-overlay", css)
+        self.assertIn("ghost-projectile-cell", css)
+
+        # 5. Projectile physics contracts in CSS and JS
+        self.assertIn("position: fixed", css)
+        self.assertIn("zIndex", anim_js)
+        self.assertIn("cubic-bezier(0.4, 0.0, 0.2, 1.0)", anim_js)
+        self.assertIn("isSteppingBackward", app_js)
+
+    def test_phase1_critical_ux_contracts(self):
+        """Verify Phase 1 critical UX contracts: dirty state tracking, modal confirmation, green CTA, responsive toolbar."""
+        # 1. Confirm discard modal markup in index.html
+        res_html = self.client.get("/")
+        self.assertEqual(res_html.status_code, 200)
+        html = res_html.data.decode("utf-8")
+        self.assertIn('id="confirm-modal"', html)
+        self.assertIn('id="confirm-modal-title"', html)
+        self.assertIn('id="confirm-modal-message"', html)
+        self.assertIn('id="confirm-modal-cancel"', html)
+        self.assertIn('id="confirm-modal-proceed"', html)
+        self.assertIn('class="editor-controls-actions"', html)
+        self.assertIn('class="examples-dropdown-wrapper"', html)
+
+        # 2. Dirty tracking and modal handler contracts in app.js
+        res_app = self.client.get("/static/js/app.js")
+        self.assertEqual(res_app.status_code, 200)
+        app_js = res_app.data.decode("utf-8")
+        self.assertIn("isEditorDirty", app_js)
+        self.assertIn("lastLoadedCode", app_js)
+        self.assertIn("requestDiscardConfirmation", app_js)
+        self.assertIn("closeConfirmModal", app_js)
+        self.assertIn("setEditorCode(DEFAULT_PYTHON_EXAMPLE, true)", app_js)
+
+        # 3. CSS styles: Green CTA, responsive editor controls, modal card styles
+        res_css = self.client.get("/static/css/styles.css")
+        self.assertEqual(res_css.status_code, 200)
+        css = res_css.data.decode("utf-8")
+        self.assertIn(".btn-primary", css)
+        self.assertIn("background-color: #238636", css)
+        self.assertIn("border-color: #2ea043", css)
+        self.assertIn(".editor-controls-actions", css)
+        self.assertIn(".examples-dropdown-wrapper", css)
+        self.assertIn(".modal-backdrop", css)
+        self.assertIn(".modal-card", css)
+        self.assertIn(".btn-danger", css)
+
+    def test_phase3_discoverability_and_shortcuts(self):
+        """Verify Phase 3 discoverability: control tooltips, help button, shortcuts modal, focus trapping."""
+        # 1. HTML elements: help button, tooltips, and shortcuts modal
+        res_html = self.client.get("/")
+        self.assertEqual(res_html.status_code, 200)
+        html = res_html.data.decode("utf-8")
+
+        self.assertIn('id="btn-shortcuts-help"', html)
+        self.assertIn('id="shortcuts-modal"', html)
+        self.assertIn('id="shortcuts-modal-title"', html)
+        self.assertIn('id="shortcuts-modal-close"', html)
+        self.assertIn('id="shortcuts-modal-dismiss"', html)
+
+        # Tooltip hints on controls
+        self.assertIn('title="Visualize Code (Ctrl + Enter)"', html)
+        self.assertIn('title="First Step (Home)"', html)
+        self.assertIn('title="Step Backward (←)"', html)
+        self.assertIn('title="Play / Pause (Space)"', html)
+        self.assertIn('title="Step Forward (→)"', html)
+        self.assertIn('title="Last Step (End)"', html)
+
+        # Tab buttons action clarification
+        self.assertIn('title="Focus Custom Code Workspace"', html)
+        self.assertIn('title="Explore Algorithm Examples"', html)
+
+        # 2. CSS styles: shortcuts modal and keyboard badge styling
+        res_css = self.client.get("/static/css/styles.css")
+        self.assertEqual(res_css.status_code, 200)
+        css = res_css.data.decode("utf-8")
+
+        self.assertIn(".header-help-btn", css)
+        self.assertIn(".modal-card-shortcuts", css)
+        self.assertIn(".shortcuts-group", css)
+        self.assertIn(".shortcuts-group-title", css)
+        self.assertIn(".shortcut-item", css)
+        self.assertIn(".shortcut-keys", css)
+        self.assertIn(".shortcut-keys kbd", css)
+
+        # 3. JavaScript logic: open/close, focus trapping, background blocking
+        res_app = self.client.get("/static/js/app.js")
+        self.assertEqual(res_app.status_code, 200)
+        app_js = res_app.data.decode("utf-8")
+
+        self.assertIn("openShortcutsModal", app_js)
+        self.assertIn("closeShortcutsModal", app_js)
+        self.assertIn("trapFocusInModal", app_js)
+        self.assertIn('shortcutsModal.classList.contains("is-open")', app_js)
+
+    def test_phase4_design_system_and_typography(self):
+        """Verify Phase 4 design system: micro-typography tokens, border tokens, zero literal micro font sizes, updated DESIGN.md."""
+        res_css = self.client.get("/static/css/styles.css")
+        self.assertEqual(res_css.status_code, 200)
+        css = res_css.data.decode("utf-8")
+
+        # Centralized micro-typography custom properties
+        self.assertIn("--font-size-xs: 11px;", css)
+        self.assertIn("--font-size-xxs: 10px;", css)
+        self.assertIn("--font-size-micro: 9px;", css)
+        self.assertIn("--border-elevated: #30363d;", css)
+
+        # Ensure no literal font-size: 11px, 10px, or 9px remain in styles.css
+        literal_micro_sizes = re.findall(r'font-size:\s*(?:11px|10px|9px)\b', css)
+        self.assertEqual(
+            literal_micro_sizes,
+            [],
+            f"Found un-tokenized literal micro font sizes in styles.css: {literal_micro_sizes}"
+        )
+
+        # Verify DESIGN.md exists and documents layout, syntax tokens, and typography tokens
+        with open("DESIGN.md", "r", encoding="utf-8") as f:
+            design_md = f.read()
+
+        self.assertIn("responsive two-column desktop workspace", design_md)
+        self.assertIn("--font-size-xs", design_md)
+        self.assertIn("--border-elevated", design_md)
+        self.assertIn("#ff7b72", design_md)  # CodeMirror keyword token
+
 
 
 if __name__ == "__main__":

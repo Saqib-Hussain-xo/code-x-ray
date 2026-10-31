@@ -23,8 +23,9 @@
                 <span class="brand-title">X-Ray // Runtime Inspector</span>
             </div>
             <nav class="header-nav">
-                <span id="tab-custom-code" class="nav-tab active">Custom Code</span>
-                <a href="#explore-examples" id="tab-explore-examples" class="nav-tab">Explore Examples</a>
+                <button type="button" id="tab-custom-code" class="nav-tab active" title="Focus Custom Code Workspace">Custom Code</button>
+                <button type="button" id="tab-explore-examples" class="nav-tab" title="Explore Algorithm Examples">Explore Examples</button>
+                <button type="button" id="btn-shortcuts-help" class="header-help-btn" title="Keyboard Shortcuts (?)" aria-label="Open Keyboard Shortcuts Reference">?</button>
                 <span class="runtime-badge">PYTHON 3</span>
                 <a href="/privacy" class="header-link">Privacy Policy</a>
                 <a href="/terms" class="header-link">Terms and Conditions</a>
@@ -48,14 +49,16 @@
                     </div>
                     <div class="panel-body">
                         <div class="editor-controls">
-                            <button type="button" id="btn-run" class="btn btn-primary" aria-label="Visualize Code">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                                    <polygon points="6 4 20 12 6 20 6 4" />
-                                </svg>
-                                <span>Visualize Code</span>
-                            </button>
-                            <button type="button" id="btn-reset-example" class="btn btn-secondary" aria-label="Reset Example Code">Reset Example</button>
-                            <button type="button" id="btn-clear" class="btn btn-secondary" aria-label="Clear Code Editor">Clear</button>
+                            <div class="editor-controls-actions">
+                                <button type="button" id="btn-run" class="btn btn-primary" aria-label="Visualize Code" title="Visualize Code (Ctrl + Enter)">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                        <polygon points="6 4 20 12 6 20 6 4" />
+                                    </svg>
+                                    <span>Visualize Code</span>
+                                </button>
+                                <button type="button" id="btn-reset-example" class="btn btn-secondary" aria-label="Reset Example Code" title="Reset to default Palindrome example">Reset Example</button>
+                                <button type="button" id="btn-clear" class="btn btn-secondary" aria-label="Clear Code Editor" title="Clear editor content">Clear</button>
+                            </div>
 
                             <div class="examples-dropdown-wrapper">
                                 <select id="preset-select" class="preset-select" aria-label="Explore Examples (25 DSA Problems)">
@@ -178,6 +181,7 @@
                             <div id="sequences-container" class="sequences-wrapper">
                                 <!-- Populated dynamically during execution trace -->
                             </div>
+                            <div id="sequence-animation-overlay" class="sequence-animation-overlay" aria-hidden="true"></div>
                         </div>
                     </div>
                 </section>
@@ -193,17 +197,17 @@
                         <polygon points="19 18 9 12 19 6 19 18" fill="currentColor" stroke="none" />
                     </svg>
                 </button>
-                <button type="button" id="btn-prev" class="btn-transport" title="Step Back (Left Arrow)" disabled aria-label="Step Back">
+                <button type="button" id="btn-prev" class="btn-transport" title="Step Backward (←)" disabled aria-label="Step Backward">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                         <polygon points="18 19 8 12 18 5 18 19" />
                     </svg>
                 </button>
-                <button type="button" id="btn-play" class="btn-transport btn-play" title="Play (Space)" disabled aria-label="Play execution">
+                <button type="button" id="btn-play" class="btn-transport btn-play" title="Play / Pause (Space)" disabled aria-label="Play execution">
                     <svg id="icon-play" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                         <polygon points="7 4 19 12 7 20 7 4" />
                     </svg>
                 </button>
-                <button type="button" id="btn-next" class="btn-transport" title="Step Forward (Right Arrow)" disabled aria-label="Step Forward">
+                <button type="button" id="btn-next" class="btn-transport" title="Step Forward (→)" disabled aria-label="Step Forward">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                         <polygon points="6 5 16 12 6 19 6 5" />
                     </svg>
@@ -232,13 +236,80 @@
             </div>
         </footer>
     </div>
-    <canvas id="diwali-canvas" class="diwali-canvas" aria-hidden="true"></canvas>
+    <div id="confirm-modal" class="modal-backdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+        <div class="modal-card">
+            <div class="modal-header">
+                <span id="confirm-modal-title" class="modal-title">CONFIRM DISCARD // UNSAVED CUSTOM CODE</span>
+                <button type="button" id="confirm-modal-close" class="modal-close" aria-label="Close dialog">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-modal-message">You have modified the code in the editor. Loading a new example will discard your custom Python code. Do you want to proceed?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="confirm-modal-cancel" class="btn btn-secondary">Keep Custom Code</button>
+                <button type="button" id="confirm-modal-proceed" class="btn btn-danger">Discard and Replace</button>
+            </div>
+        </div>
+    </div>
+    <div id="shortcuts-modal" class="modal-backdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-title">
+        <div class="modal-card modal-card-shortcuts">
+            <div class="modal-header">
+                <span id="shortcuts-modal-title" class="modal-title">KEYBOARD SHORTCUTS REFERENCE</span>
+                <button type="button" id="shortcuts-modal-close" class="modal-close" aria-label="Close shortcuts dialog">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="shortcuts-group">
+                    <div class="shortcuts-group-title">EDITOR</div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-action">Visualize Code</span>
+                        <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>Enter</kbd></span>
+                    </div>
+                </div>
+                <div class="shortcuts-group">
+                    <div class="shortcuts-group-title">PLAYBACK</div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-action">Play / Pause</span>
+                        <span class="shortcut-keys"><kbd>Space</kbd></span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-action">Step Forward</span>
+                        <span class="shortcut-keys"><kbd>→</kbd></span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-action">Step Backward</span>
+                        <span class="shortcut-keys"><kbd>←</kbd></span>
+                    </div>
+                </div>
+                <div class="shortcuts-group">
+                    <div class="shortcuts-group-title">NAVIGATION</div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-action">First Step</span>
+                        <span class="shortcut-keys"><kbd>Home</kbd></span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-action">Last Step</span>
+                        <span class="shortcut-keys"><kbd>End</kbd></span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-action">Keyboard Shortcuts</span>
+                        <span class="shortcut-keys"><kbd>?</kbd></span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-action">Close Dialog</span>
+                        <span class="shortcut-keys"><kbd>Esc</kbd></span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="shortcuts-modal-dismiss" class="btn btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
     <script src="{{ url_for('static', filename='vendor/codemirror/codemirror.min.js') }}?v=1.1.0"></script>
     <script src="{{ url_for('static', filename='vendor/codemirror/python.min.js') }}?v=1.1.0"></script>
     <script src="{{ url_for('static', filename='vendor/codemirror/matchbrackets.min.js') }}?v=1.1.0"></script>
     <script src="{{ url_for('static', filename='vendor/codemirror/closebrackets.min.js') }}?v=1.1.0"></script>
     <script src="{{ url_for('static', filename='js/presets.js') }}?v=1.1.0"></script>
-    <script src="{{ url_for('static', filename='js/spark.js') }}?v=1.1.0"></script>
     <script src="{{ url_for('static', filename='js/animator.js') }}?v=1.1.0"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}?v=1.1.0"></script>
 </body>

@@ -2,8 +2,8 @@
  * X-Ray Execution Agent: Unified Animation Controller
  * File: static/js/animator.js
  *
- * Implements physics-inspired projectile swap animations, FLIP pointer gliding,
- * operation-aware comparison elevation, mutation pulses, and speed-adaptive timing.
+ * Implements physics-inspired projectile swap animations via dedicated ghost overlay,
+ * FLIP pointer gliding, operation-aware comparison elevation, and speed-adaptive timing.
  *
  * Strict security & anti-vibe-coding rules:
  * - Zero eval() or unsafe innerHTML insertion
@@ -52,10 +52,10 @@
         const speedSelect = document.getElementById("speed-select");
         const speed = parseFloat(speedSelect ? speedSelect.value : "1.0") || 1.0;
 
-        if (speed >= 4.0) return 140;
-        if (speed >= 2.0) return 240;
-        if (speed <= 0.5) return 750;
-        return 460; // 1.0x baseline swap duration in ms (within 400-550ms range)
+        if (speed >= 4.0) return 180;
+        if (speed >= 2.0) return 320;
+        if (speed <= 0.5) return 850;
+        return 580; // 1.0x baseline swap duration in ms (within 500-650ms range)
     }
 
     function updateAnimationSpeed() {
@@ -138,8 +138,8 @@
         }
     }
 
-    // 4. Projectile-Style Curved Swap Animation via Web Animations API
-    function animateSwap(seqName, idxA, idxB) {
+    // 4. Projectile-Style Curved Swap Animation via Dedicated Ghost Overlay & Web Animations API
+    function animateSwap(seqName, idxA, idxB, fromValues) {
         if (isRapidNavigation || prefersReducedMotion) return;
 
         const stage = document.getElementById("sequences-container");
@@ -158,123 +158,222 @@
         const cellB = blocksRow.children[j];
         if (!cellA || !cellB) return;
 
+        // Ensure animation overlay container exists (fixed viewport overlay)
+        let overlay = document.getElementById("sequence-animation-overlay");
+        if (!overlay) {
+            overlay = document.createElement("div");
+            overlay.id = "sequence-animation-overlay";
+            overlay.className = "sequence-animation-overlay";
+            overlay.setAttribute("aria-hidden", "true");
+            document.body.appendChild(overlay);
+        }
+
         const rectA = cellA.getBoundingClientRect();
         const rectB = cellB.getBoundingClientRect();
-        const dx = rectB.left - rectA.left;
 
+        const dx = rectB.left - rectA.left;
         if (Math.abs(dx) < 2) return;
 
-        // Calculate adaptive arc height based on travel distance
-        const H = Math.min(65, Math.max(24, 18 + Math.abs(dx) * 0.14));
-        const HA = H;          // Cell A takes higher arc in front
-        const HB = H * 0.65;   // Cell B takes lower arc behind to avoid mid-air collision
+        const dist = Math.abs(dx);
+
+        // Substantial physical arc height: minimum 88px for adjacent elements up to 130px for distant elements
+        const H = Math.min(130, Math.max(88, 82 + dist * 0.18));
+        const HA = H;                       // Ghost A takes higher arc in front (88px to 130px)
+        const HB = Math.round(H * 0.65);    // Ghost B takes lower arc behind (57px to 84px)
 
         const duration = getSwapDuration();
 
-        // Keyframes for cellA (currently showing value from idxB, travels from +dx to 0)
+        // Retrieve values for both cells
+        const valA = (fromValues && fromValues.length >= 2) ? String(fromValues[0]) : cellB.textContent;
+        const valB = (fromValues && fromValues.length >= 2) ? String(fromValues[1]) : cellA.textContent;
+
+        // Create Ghost A (starts at slot A, carries valA to slot B)
+        const ghostA = document.createElement("div");
+        ghostA.className = "memory-block-cell ghost-projectile-cell";
+        ghostA.textContent = valA;
+        ghostA.style.position = "fixed";
+        ghostA.style.left = `${rectA.left}px`;
+        ghostA.style.top = `${rectA.top}px`;
+        ghostA.style.width = `${rectA.width}px`;
+        ghostA.style.height = `${rectA.height}px`;
+        ghostA.style.zIndex = "10005";
+
+        // Create Ghost B (starts at slot B, carries valB to slot A)
+        const ghostB = document.createElement("div");
+        ghostB.className = "memory-block-cell ghost-projectile-cell";
+        ghostB.textContent = valB;
+        ghostB.style.position = "fixed";
+        ghostB.style.left = `${rectB.left}px`;
+        ghostB.style.top = `${rectB.top}px`;
+        ghostB.style.width = `${rectB.width}px`;
+        ghostB.style.height = `${rectB.height}px`;
+        ghostB.style.zIndex = "10003";
+
+        // Hide underlying cells during flight
+        cellA.style.visibility = "hidden";
+        cellB.style.visibility = "hidden";
+
+        overlay.appendChild(ghostA);
+        overlay.appendChild(ghostB);
+
+        // Trajectory Keyframes for Ghost A (travels +dx)
         const keyframesA = [
             {
-                transform: `translate(${dx}px, 0px) scale(1)`,
-                zIndex: 12,
+                transform: "translate(0px, 0px) scale(1)",
+                boxShadow: "0 2px 4px rgba(0, 0, 0, 0.2)",
+                zIndex: 10005,
                 offset: 0
             },
             {
-                transform: `translate(${dx * 0.75}px, ${-HA * 0.75}px) scale(1.05)`,
-                zIndex: 12,
-                offset: 0.25
+                transform: `translate(${dx * 0.15}px, ${-HA * 0.55}px) scale(1.08)`,
+                boxShadow: "0 10px 18px rgba(0, 0, 0, 0.4), 0 0 10px rgba(88, 166, 255, 0.4)",
+                zIndex: 10005,
+                offset: 0.16
             },
             {
-                transform: `translate(${dx * 0.5}px, ${-HA}px) scale(1.08)`,
-                zIndex: 12,
-                offset: 0.5
+                transform: `translate(${dx * 0.35}px, ${-HA * 0.90}px) scale(1.14)`,
+                boxShadow: "0 18px 28px rgba(0, 0, 0, 0.5), 0 0 16px rgba(88, 166, 255, 0.55)",
+                zIndex: 10005,
+                offset: 0.36
             },
             {
-                transform: `translate(${dx * 0.25}px, ${-HA * 0.75}px) scale(1.05)`,
-                zIndex: 12,
-                offset: 0.75
+                transform: `translate(${dx * 0.50}px, ${-HA}px) scale(1.18)`,
+                boxShadow: "0 24px 36px rgba(0, 0, 0, 0.6), 0 0 20px rgba(88, 166, 255, 0.7)",
+                zIndex: 10005,
+                offset: 0.50
             },
             {
-                transform: `translate(0px, 2px) scale(1.02)`,
-                zIndex: 12,
-                offset: 0.92
+                transform: `translate(${dx * 0.65}px, ${-HA * 0.90}px) scale(1.14)`,
+                boxShadow: "0 18px 28px rgba(0, 0, 0, 0.5), 0 0 16px rgba(88, 166, 255, 0.55)",
+                zIndex: 10005,
+                offset: 0.64
             },
             {
-                transform: `translate(0px, 0px) scale(1)`,
-                zIndex: 1,
+                transform: `translate(${dx * 0.85}px, ${-HA * 0.55}px) scale(1.08)`,
+                boxShadow: "0 10px 18px rgba(0, 0, 0, 0.4), 0 0 10px rgba(88, 166, 255, 0.4)",
+                zIndex: 10005,
+                offset: 0.84
+            },
+            {
+                transform: `translate(${dx}px, 3px) scale(0.97)`,
+                boxShadow: "0 4px 8px rgba(0, 0, 0, 0.3)",
+                zIndex: 10005,
+                offset: 0.94
+            },
+            {
+                transform: `translate(${dx}px, 0px) scale(1)`,
+                boxShadow: "0 2px 4px rgba(0, 0, 0, 0.2)",
+                zIndex: 10005,
                 offset: 1
             }
         ];
 
-        // Keyframes for cellB (currently showing value from idxA, travels from -dx to 0)
+        // Trajectory Keyframes for Ghost B (travels -dx)
         const keyframesB = [
             {
-                transform: `translate(${-dx}px, 0px) scale(1)`,
-                zIndex: 10,
+                transform: "translate(0px, 0px) scale(1)",
+                boxShadow: "0 2px 4px rgba(0, 0, 0, 0.2)",
+                zIndex: 10003,
                 offset: 0
             },
             {
-                transform: `translate(${-dx * 0.75}px, ${-HB * 0.75}px) scale(0.96)`,
-                zIndex: 10,
-                offset: 0.25
+                transform: `translate(${-dx * 0.15}px, ${-HB * 0.55}px) scale(0.96)`,
+                boxShadow: "0 6px 12px rgba(0, 0, 0, 0.35)",
+                zIndex: 10003,
+                offset: 0.16
             },
             {
-                transform: `translate(${-dx * 0.5}px, ${-HB}px) scale(0.93)`,
-                zIndex: 10,
-                offset: 0.5
+                transform: `translate(${-dx * 0.35}px, ${-HB * 0.90}px) scale(0.93)`,
+                boxShadow: "0 12px 18px rgba(0, 0, 0, 0.4)",
+                zIndex: 10003,
+                offset: 0.36
             },
             {
-                transform: `translate(${-dx * 0.25}px, ${-HB * 0.75}px) scale(0.96)`,
-                zIndex: 10,
-                offset: 0.75
+                transform: `translate(${-dx * 0.50}px, ${-HB}px) scale(0.91)`,
+                boxShadow: "0 14px 22px rgba(0, 0, 0, 0.45)",
+                zIndex: 10003,
+                offset: 0.50
             },
             {
-                transform: `translate(0px, 2px) scale(0.98)`,
-                zIndex: 10,
-                offset: 0.92
+                transform: `translate(${-dx * 0.65}px, ${-HB * 0.90}px) scale(0.93)`,
+                boxShadow: "0 12px 18px rgba(0, 0, 0, 0.4)",
+                zIndex: 10003,
+                offset: 0.64
             },
             {
-                transform: `translate(0px, 0px) scale(1)`,
-                zIndex: 1,
+                transform: `translate(${-dx * 0.85}px, ${-HB * 0.55}px) scale(0.96)`,
+                boxShadow: "0 6px 12px rgba(0, 0, 0, 0.35)",
+                zIndex: 10003,
+                offset: 0.84
+            },
+            {
+                transform: `translate(${-dx}px, 3px) scale(0.97)`,
+                boxShadow: "0 3px 6px rgba(0, 0, 0, 0.3)",
+                zIndex: 10003,
+                offset: 0.94
+            },
+            {
+                transform: `translate(${-dx}px, 0px) scale(1)`,
+                boxShadow: "0 2px 4px rgba(0, 0, 0, 0.2)",
+                zIndex: 10003,
                 offset: 1
             }
         ];
 
         const animOptions = {
             duration: duration,
-            easing: "cubic-bezier(0.25, 1, 0.5, 1)",
-            fill: "none"
+            easing: "cubic-bezier(0.4, 0.0, 0.2, 1.0)",
+            fill: "forwards"
         };
 
-        cellA.classList.add("cell-swap-active");
-        cellB.classList.add("cell-swap-active");
-
         try {
-            const animA = cellA.animate(keyframesA, animOptions);
-            const animB = cellB.animate(keyframesB, animOptions);
+            const animA = ghostA.animate(keyframesA, animOptions);
+            const animB = ghostB.animate(keyframesB, animOptions);
+
+            if (document.timeline && typeof document.timeline.currentTime === "number") {
+                animA.startTime = document.timeline.currentTime;
+                animB.startTime = document.timeline.currentTime;
+            }
 
             activeAnimations.push(animA, animB);
 
-            const settleHandler = function () {
-                cellA.classList.remove("cell-swap-active");
-                cellB.classList.remove("cell-swap-active");
+            let finished = false;
+            const cleanup = function () {
+                if (finished) return;
+                finished = true;
+
+                try {
+                    if (ghostA.parentNode) ghostA.remove();
+                    if (ghostB.parentNode) ghostB.remove();
+                } catch (_) {}
+
+                cellA.style.visibility = "";
+                cellB.style.visibility = "";
                 cellA.classList.add("cell-settling");
                 cellB.classList.add("cell-settling");
+
                 setTimeout(function () {
                     cellA.classList.remove("cell-settling");
                     cellB.classList.remove("cell-settling");
-                }, 200);
+                }, 180);
             };
 
-            animA.onfinish = settleHandler;
+            if (animA.finished && typeof animA.finished.then === "function") {
+                animA.finished.then(cleanup).catch(cleanup);
+            }
+            animA.onfinish = cleanup;
+            setTimeout(cleanup, duration + 30);
         } catch (_) {
-            cellA.classList.remove("cell-swap-active");
-            cellB.classList.remove("cell-swap-active");
+            if (ghostA.parentNode) ghostA.remove();
+            if (ghostB.parentNode) ghostB.remove();
+            cellA.style.visibility = "";
+            cellB.style.visibility = "";
         }
     }
 
     // 5. Operation-Aware Routing
-    function applyOperationAnimations(step) {
-        if (!step || !Array.isArray(step.operations) || isRapidNavigation || prefersReducedMotion) return;
+    function applyOperationAnimations(step, isSteppingBackward) {
+        if (!step || !Array.isArray(step.operations) || isRapidNavigation || prefersReducedMotion || isSteppingBackward) return;
 
         const stage = document.getElementById("sequences-container");
         if (!stage) return;
@@ -283,8 +382,9 @@
             if (op.type === "swap") {
                 const seq = op.sequence;
                 const indices = op.indices || [];
+                const fromVals = op.from_values;
                 if (indices.length === 2) {
-                    animateSwap(seq, indices[0], indices[1]);
+                    animateSwap(seq, indices[0], indices[1], fromVals);
                 }
             } else if (op.type === "comparison") {
                 const seq = op.sequence;
@@ -375,7 +475,7 @@
 
         afterStepRender: function (step, prevStep, isSteppingBackward) {
             animatePointers();
-            applyOperationAnimations(step);
+            applyOperationAnimations(step, isSteppingBackward);
             animateMemoryTable(step, prevStep);
         },
 
@@ -390,6 +490,18 @@
                 } catch (_) {}
             }
             activeAnimations = [];
+
+            const overlay = document.getElementById("sequence-animation-overlay");
+            if (overlay) {
+                overlay.replaceChildren();
+            }
+
+            const hiddenCells = document.querySelectorAll(".memory-block-cell");
+            for (let i = 0; i < hiddenCells.length; i++) {
+                if (hiddenCells[i].style.visibility === "hidden") {
+                    hiddenCells[i].style.visibility = "";
+                }
+            }
 
             if (rapidNavTimeout) clearTimeout(rapidNavTimeout);
             rapidNavTimeout = setTimeout(function () {
