@@ -40,7 +40,7 @@ print("Is palindrome:", result)
     let isTracing = false;          // API request in-flight flag
     let currentActiveLineNo = null; // Active highlighted source line
     let currentErrorLineNo = null;  // Active syntax error line in editor
-    let hasTriggeredDiwaliThisRun = false; // Diwali animation single-fire guard
+    let hasTriggeredCompletionThisRun = false; // Execution completion indicator single-fire guard
     let cmEditor = null;            // CodeMirror editor instance
     const API_BASE_URL = window.XRAY_API_BASE_URL || "";
 
@@ -74,6 +74,23 @@ print("Is palindrome:", result)
     const timelineScrubber = document.getElementById("timeline-scrubber");
     const stepCounter = document.getElementById("step-counter");
     const speedSelect = document.getElementById("speed-select");
+
+    const confirmModal = document.getElementById("confirm-modal");
+    const confirmModalMessage = document.getElementById("confirm-modal-message");
+    const confirmModalClose = document.getElementById("confirm-modal-close");
+    const confirmModalCancel = document.getElementById("confirm-modal-cancel");
+    const confirmModalProceed = document.getElementById("confirm-modal-proceed");
+
+    const btnShortcutsHelp = document.getElementById("btn-shortcuts-help");
+    const shortcutsModal = document.getElementById("shortcuts-modal");
+    const shortcutsModalClose = document.getElementById("shortcuts-modal-close");
+    const shortcutsModalDismiss = document.getElementById("shortcuts-modal-dismiss");
+    let lastFocusedElementBeforeModal = null;
+
+    let lastLoadedCode = "";
+    let activePresetId = "";
+    let pendingConfirmAction = null;
+    let pendingCancelAction = null;
 
     // 3. Formatting Helpers
     function formatValue(val) {
@@ -126,15 +143,103 @@ print("Is palindrome:", result)
         return codeInput ? codeInput.value : "";
     }
 
-    function setEditorCode(code) {
+    function isEditorDirty() {
+        const current = getEditorCode().trim();
+        if (!current) return false;
+        return current !== lastLoadedCode.trim();
+    }
+
+    function setEditorCode(code, markClean = false) {
         if (cmEditor) {
             cmEditor.setValue(code);
         }
         if (codeInput) {
             codeInput.value = code;
         }
+        if (markClean) {
+            lastLoadedCode = code;
+        }
         updateEditorGutter();
         syncEditorScroll();
+    }
+
+    function requestDiscardConfirmation(message, onProceed, onCancel) {
+        if (!isEditorDirty()) {
+            onProceed();
+            return;
+        }
+
+        pendingConfirmAction = onProceed;
+        pendingCancelAction = onCancel;
+
+        if (confirmModal) {
+            if (confirmModalMessage && message) {
+                confirmModalMessage.textContent = message;
+            }
+            confirmModal.classList.add("is-open");
+            confirmModal.setAttribute("aria-hidden", "false");
+            if (confirmModalCancel) {
+                confirmModalCancel.focus();
+            }
+        } else {
+            if (window.confirm(message || "Discard current custom code?")) {
+                onProceed();
+            } else if (onCancel) {
+                onCancel();
+            }
+        }
+    }
+
+    function closeConfirmModal(proceed = false) {
+        if (!confirmModal) return;
+        confirmModal.classList.remove("is-open");
+        confirmModal.setAttribute("aria-hidden", "true");
+
+        if (proceed) {
+            if (pendingConfirmAction) pendingConfirmAction();
+        } else {
+            if (pendingCancelAction) pendingCancelAction();
+        }
+        pendingConfirmAction = null;
+        pendingCancelAction = null;
+    }
+
+    function openShortcutsModal() {
+        if (!shortcutsModal) return;
+        lastFocusedElementBeforeModal = document.activeElement;
+        shortcutsModal.classList.add("is-open");
+        shortcutsModal.setAttribute("aria-hidden", "false");
+        if (shortcutsModalClose) {
+            shortcutsModalClose.focus();
+        }
+    }
+
+    function closeShortcutsModal() {
+        if (!shortcutsModal) return;
+        shortcutsModal.classList.remove("is-open");
+        shortcutsModal.setAttribute("aria-hidden", "true");
+        if (lastFocusedElementBeforeModal && typeof lastFocusedElementBeforeModal.focus === "function") {
+            lastFocusedElementBeforeModal.focus();
+        }
+    }
+
+    function trapFocusInModal(modalEl, e) {
+        if (e.key !== "Tab" || !modalEl) return;
+        const focusable = modalEl.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])');
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+            if (document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            }
+        } else {
+            if (document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
+        }
     }
 
     // Syntax validation feedback handling
@@ -300,12 +405,22 @@ print("Is palindrome:", result)
 
             const presets = window.ALGORITHM_PRESETS || {};
             if (Object.prototype.hasOwnProperty.call(presets, key)) {
-                pause();
-                resetTraceVisuals();
-                clearSyntaxValidation();
-                setEditorCode(presets[key]);
-                highlightEditorLine(null);
-                updateStatus(`EXAMPLE LOADED // ${key.toUpperCase()}`);
+                const previousPreset = activePresetId;
+                requestDiscardConfirmation(
+                    "You have modified the code in the editor. Loading this example will discard your custom Python code. Do you want to proceed?",
+                    function () {
+                        activePresetId = key;
+                        pause();
+                        resetTraceVisuals();
+                        clearSyntaxValidation();
+                        setEditorCode(presets[key], true);
+                        highlightEditorLine(null);
+                        updateStatus(`EXAMPLE LOADED // ${key.toUpperCase()}`);
+                    },
+                    function () {
+                        presetSelect.value = previousPreset;
+                    }
+                );
             }
         });
     }
@@ -354,8 +469,7 @@ print("Is palindrome:", result)
         showSyntaxValid();
         pause();
         isTracing = true;
-        hasTriggeredDiwaliThisRun = false;
-        if (window.stopDiwaliSpark) window.stopDiwaliSpark();
+        hasTriggeredCompletionThisRun = false;
         updateStatus("TRACING // RUNNING...", "status-running");
 
         if (btnRun) btnRun.disabled = true;
@@ -462,10 +576,15 @@ print("Is palindrome:", result)
         if (!traceData || !traceData.steps || traceData.steps.length === 0) return;
 
         stepIndex = Math.max(0, Math.min(stepIndex, traceData.steps.length - 1));
-        currentStepIndex = stepIndex;
-
         const step = traceData.steps[stepIndex];
         const prevStep = (stepIndex > 0) ? traceData.steps[stepIndex - 1] : null;
+
+        if (window.XRayAnimator && window.XRayAnimator.beforeStepRender) {
+            window.XRayAnimator.beforeStepRender(step, prevStep);
+        }
+
+        const isSteppingBackward = (stepIndex < currentStepIndex);
+        currentStepIndex = stepIndex;
 
         // 6A. Update Transport Navigation Controls
         if (timelineScrubber) timelineScrubber.value = String(stepIndex);
@@ -488,15 +607,27 @@ print("Is palindrome:", result)
         // 6E. Synchronize Console Output
         renderConsole(step);
 
-        // 6F. Trigger Diwali Celebration Spark if final step reached on completed execution
+        if (window.XRayAnimator && window.XRayAnimator.afterStepRender) {
+            window.XRayAnimator.afterStepRender(step, prevStep, isSteppingBackward);
+        }
+
+        // 6F. Trigger restrained execution complete indicator if final step reached on completed execution
         if (stepIndex === traceData.total_steps - 1 && traceData.status === "completed") {
-            if (window.triggerDiwaliSpark && !hasTriggeredDiwaliThisRun) {
-                hasTriggeredDiwaliThisRun = true;
-                window.triggerDiwaliSpark();
+            if (!hasTriggeredCompletionThisRun) {
+                hasTriggeredCompletionThisRun = true;
+                triggerExecutionComplete();
             }
         } else {
-            hasTriggeredDiwaliThisRun = false;
+            hasTriggeredCompletionThisRun = false;
         }
+    }
+
+    function triggerExecutionComplete() {
+        if (!traceStatus || !traceData) return;
+        updateStatus(`EXECUTION COMPLETE // ${traceData.total_steps} STEPS`, "status-completed");
+        traceStatus.classList.remove("status-completed-pulse");
+        void traceStatus.offsetWidth;
+        traceStatus.classList.add("status-completed-pulse");
     }
 
     // 6C. Sub-renderer: Memory Map Table
@@ -607,6 +738,111 @@ print("Is palindrome:", result)
     }
 
     // 6D. Sub-renderer: Sequence & Pointer Stage
+    function createSequenceContainer(seq, seqPointers, isSeqMutated) {
+        // Container for this individual sequence
+        const seqBox = document.createElement("div");
+        seqBox.className = "sequence-container";
+        seqBox.setAttribute("data-seq-name", seq.name);
+
+        // Row A: Sequence Label Row (explicit margin-bottom separation)
+        const labelRow = document.createElement("div");
+        labelRow.className = "sequence-label-row";
+
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "seq-label-name";
+        nameSpan.textContent = seq.name;
+
+        const typeSpan = document.createElement("span");
+        typeSpan.className = "seq-label-type";
+        typeSpan.textContent = seq.type;
+
+        const lenSpan = document.createElement("span");
+        lenSpan.className = "seq-label-len";
+        lenSpan.textContent = `[${seq.length}]`;
+
+        labelRow.appendChild(nameSpan);
+        labelRow.appendChild(typeSpan);
+        labelRow.appendChild(lenSpan);
+        seqBox.appendChild(labelRow);
+
+        // Row B: Horizontal Scrolling Track for Elements and Indices
+        const track = document.createElement("div");
+        track.className = "sequence-cells-track";
+
+        const trackInner = document.createElement("div");
+        trackInner.className = "sequence-track-inner";
+
+        // Sub-row 1: Indices
+        const indicesRow = document.createElement("div");
+        indicesRow.className = "sequence-indices-row";
+
+        // Sub-row 2: Memory Block Cells
+        const blocksRow = document.createElement("div");
+        blocksRow.className = "sequence-blocks-row";
+
+        // Sub-row 3: Pointer Slots
+        const pointersRow = document.createElement("div");
+        pointersRow.className = "sequence-pointers-row";
+
+        const elements = Array.isArray(seq.elements) ? seq.elements : [];
+
+        for (let idx = 0; idx < seq.length; idx++) {
+            const matchedPtrs = seqPointers.filter(p => p.value === idx);
+
+            // Index Cell
+            const idxCell = document.createElement("div");
+            idxCell.className = "sequence-index-cell";
+            idxCell.textContent = String(idx);
+            if (matchedPtrs.length > 0) {
+                idxCell.classList.add("index-active");
+            }
+            indicesRow.appendChild(idxCell);
+
+            // Memory Block Cell
+            const blockCell = document.createElement("div");
+            blockCell.className = "memory-block-cell";
+            blockCell.setAttribute("data-index", String(idx));
+            blockCell.textContent = formatCellValue(elements[idx]);
+
+            if (isSeqMutated) {
+                blockCell.classList.add("cell-mutated");
+            }
+
+            if (matchedPtrs.length > 0) {
+                const hasPtrA = matchedPtrs.some(p => p.name === "left" || p.name === "i" || p.name === "start" || p.name === "slow");
+                if (hasPtrA) {
+                    blockCell.classList.add("cell-pointer-a");
+                } else {
+                    blockCell.classList.add("cell-pointer-b");
+                }
+            }
+            blocksRow.appendChild(blockCell);
+
+            // Pointer Slot
+            const ptrSlot = document.createElement("div");
+            ptrSlot.className = "pointer-slot";
+
+            for (let pi = 0; pi < matchedPtrs.length; pi++) {
+                const ptr = matchedPtrs[pi];
+                const ptrIndicator = document.createElement("span");
+                const isA = (ptr.name === "left" || ptr.name === "i" || ptr.name === "start" || ptr.name === "slow" || pi === 0);
+                ptrIndicator.className = `pointer-indicator ${isA ? "ptr-a" : "ptr-b"}`;
+                ptrIndicator.textContent = ptr.name;
+                ptrIndicator.setAttribute("data-ptr-name", ptr.name);
+                ptrSlot.appendChild(ptrIndicator);
+            }
+            pointersRow.appendChild(ptrSlot);
+        }
+
+        trackInner.appendChild(indicesRow);
+        trackInner.appendChild(blocksRow);
+        trackInner.appendChild(pointersRow);
+        track.appendChild(trackInner);
+        seqBox.appendChild(track);
+
+        return seqBox;
+    }
+
     function renderSequenceStage(step) {
         if (!sequencesContainer || !stageEmpty) return;
 
@@ -620,7 +856,15 @@ print("Is palindrome:", result)
         }
 
         stageEmpty.style.display = "none";
-        sequencesContainer.replaceChildren();
+
+        // Remove obsolete sequence containers
+        const existingBoxes = Array.from(sequencesContainer.querySelectorAll(".sequence-container"));
+        for (const box of existingBoxes) {
+            const name = box.getAttribute("data-seq-name");
+            if (!seqNames.includes(name)) {
+                box.remove();
+            }
+        }
 
         const allPointers = Array.isArray(step.pointers) ? step.pointers : [];
         const mutations = Array.isArray(step.mutations) ? step.mutations : [];
@@ -629,109 +873,93 @@ print("Is palindrome:", result)
             const seq = sequences[seqName];
             const seqPointers = allPointers.filter(p => p.target === seqName);
             const isSeqMutated = mutations.includes(seqName);
-
-            // Container for this individual sequence
-            const seqBox = document.createElement("div");
-            seqBox.className = "sequence-container";
-
-            // Row A: Sequence Label Row (explicit margin-bottom separation)
-            const labelRow = document.createElement("div");
-            labelRow.className = "sequence-label-row";
-
-            const nameSpan = document.createElement("span");
-            nameSpan.className = "seq-label-name";
-            nameSpan.textContent = seq.name;
-
-            const typeSpan = document.createElement("span");
-            typeSpan.className = "seq-label-type";
-            typeSpan.textContent = seq.type;
-
-            const lenSpan = document.createElement("span");
-            lenSpan.className = "seq-label-len";
-            lenSpan.textContent = `[${seq.length}]`;
-
-            labelRow.appendChild(nameSpan);
-            labelRow.appendChild(typeSpan);
-            labelRow.appendChild(lenSpan);
-            seqBox.appendChild(labelRow);
-
-            // Row B: Horizontal Scrolling Track for Elements and Indices
-            const track = document.createElement("div");
-            track.className = "sequence-cells-track";
-
-            const trackInner = document.createElement("div");
-            trackInner.className = "sequence-track-inner";
-
-            // Sub-row 1: Indices
-            const indicesRow = document.createElement("div");
-            indicesRow.className = "sequence-indices-row";
-
-            // Sub-row 2: Memory Block Cells
-            const blocksRow = document.createElement("div");
-            blocksRow.className = "sequence-blocks-row";
-
-            // Sub-row 3: Pointer Slots
-            const pointersRow = document.createElement("div");
-            pointersRow.className = "sequence-pointers-row";
-
             const elements = Array.isArray(seq.elements) ? seq.elements : [];
 
-            for (let idx = 0; idx < seq.length; idx++) {
-                // Find pointers currently pointing to this index
-                const matchedPtrs = seqPointers.filter(p => p.value === idx);
+            const existingBox = sequencesContainer.querySelector(`.sequence-container[data-seq-name="${seqName}"]`);
+            let canReuse = false;
 
-                // Index Cell
-                const idxCell = document.createElement("div");
-                idxCell.className = "sequence-index-cell";
-                idxCell.textContent = String(idx);
-                if (matchedPtrs.length > 0) {
-                    idxCell.classList.add("index-active");
+            if (existingBox) {
+                const blocksRow = existingBox.querySelector(".sequence-blocks-row");
+                if (blocksRow && blocksRow.children.length === seq.length) {
+                    canReuse = true;
                 }
-                indicesRow.appendChild(idxCell);
-
-                // Memory Block Cell
-                const blockCell = document.createElement("div");
-                blockCell.className = "memory-block-cell";
-                blockCell.textContent = formatCellValue(elements[idx]);
-
-                if (isSeqMutated) {
-                    blockCell.classList.add("cell-mutated");
-                }
-
-                if (matchedPtrs.length > 0) {
-                    // Check if pointer A or B
-                    const hasPtrA = matchedPtrs.some(p => p.name === "left" || p.name === "i" || p.name === "start" || p.name === "slow");
-                    if (hasPtrA) {
-                        blockCell.classList.add("cell-pointer-a");
-                    } else {
-                        blockCell.classList.add("cell-pointer-b");
-                    }
-                }
-                blocksRow.appendChild(blockCell);
-
-                // Pointer Slot
-                const ptrSlot = document.createElement("div");
-                ptrSlot.className = "pointer-slot";
-
-                for (let pi = 0; pi < matchedPtrs.length; pi++) {
-                    const ptr = matchedPtrs[pi];
-                    const ptrIndicator = document.createElement("span");
-                    // Alternate between green (ptr-a) and blue (ptr-b) based on convention
-                    const isA = (ptr.name === "left" || ptr.name === "i" || ptr.name === "start" || ptr.name === "slow" || pi === 0);
-                    ptrIndicator.className = `pointer-indicator ${isA ? "ptr-a" : "ptr-b"}`;
-                    ptrIndicator.textContent = ptr.name;
-                    ptrSlot.appendChild(ptrIndicator);
-                }
-                pointersRow.appendChild(ptrSlot);
             }
 
-            trackInner.appendChild(indicesRow);
-            trackInner.appendChild(blocksRow);
-            trackInner.appendChild(pointersRow);
-            track.appendChild(trackInner);
-            seqBox.appendChild(track);
+            if (canReuse) {
+                // Update in-place to preserve DOM element stability and prevent flickering
+                const labelRow = existingBox.querySelector(".sequence-label-row");
+                if (labelRow) {
+                    const nameSpan = labelRow.querySelector(".seq-label-name");
+                    const typeSpan = labelRow.querySelector(".seq-label-type");
+                    const lenSpan = labelRow.querySelector(".seq-label-len");
+                    if (nameSpan) nameSpan.textContent = seq.name;
+                    if (typeSpan) typeSpan.textContent = seq.type;
+                    if (lenSpan) lenSpan.textContent = `[${seq.length}]`;
+                }
 
-            sequencesContainer.appendChild(seqBox);
+                const indicesRow = existingBox.querySelector(".sequence-indices-row");
+                const blocksRow = existingBox.querySelector(".sequence-blocks-row");
+                const pointersRow = existingBox.querySelector(".sequence-pointers-row");
+
+                for (let idx = 0; idx < seq.length; idx++) {
+                    const matchedPtrs = seqPointers.filter(p => p.value === idx);
+
+                    // Update Index Cell
+                    const idxCell = indicesRow.children[idx];
+                    if (idxCell) {
+                        idxCell.textContent = String(idx);
+                        if (matchedPtrs.length > 0) {
+                            idxCell.classList.add("index-active");
+                        } else {
+                            idxCell.classList.remove("index-active");
+                        }
+                    }
+
+                    // Update Block Cell
+                    const blockCell = blocksRow.children[idx];
+                    if (blockCell) {
+                        const formattedVal = formatCellValue(elements[idx]);
+                        if (blockCell.textContent !== formattedVal) {
+                            blockCell.textContent = formattedVal;
+                        }
+                        // Reset transient classes cleanly
+                        blockCell.className = "memory-block-cell";
+                        if (isSeqMutated) {
+                            blockCell.classList.add("cell-mutated");
+                        }
+                        if (matchedPtrs.length > 0) {
+                            const hasPtrA = matchedPtrs.some(p => p.name === "left" || p.name === "i" || p.name === "start" || p.name === "slow");
+                            if (hasPtrA) {
+                                blockCell.classList.add("cell-pointer-a");
+                            } else {
+                                blockCell.classList.add("cell-pointer-b");
+                            }
+                        }
+                    }
+
+                    // Update Pointer Slot
+                    const ptrSlot = pointersRow.children[idx];
+                    if (ptrSlot) {
+                        ptrSlot.replaceChildren();
+                        for (let pi = 0; pi < matchedPtrs.length; pi++) {
+                            const ptr = matchedPtrs[pi];
+                            const ptrIndicator = document.createElement("span");
+                            const isA = (ptr.name === "left" || ptr.name === "i" || ptr.name === "start" || ptr.name === "slow" || pi === 0);
+                            ptrIndicator.className = `pointer-indicator ${isA ? "ptr-a" : "ptr-b"}`;
+                            ptrIndicator.textContent = ptr.name;
+                            ptrIndicator.setAttribute("data-ptr-name", ptr.name);
+                            ptrSlot.appendChild(ptrIndicator);
+                        }
+                    }
+                }
+            } else {
+                const newSeqBox = createSequenceContainer(seq, seqPointers, isSeqMutated);
+                if (existingBox) {
+                    existingBox.replaceWith(newSeqBox);
+                } else {
+                    sequencesContainer.appendChild(newSeqBox);
+                }
+            }
         }
     }
 
@@ -792,6 +1020,7 @@ print("Is palindrome:", result)
         }
 
         btnPlay.appendChild(svg);
+        btnPlay.classList.toggle("is-playing", isPlaying);
     }
 
     function play() {
@@ -809,12 +1038,18 @@ print("Is palindrome:", result)
         }
 
         isPlaying = true;
+        if (btnPlay) {
+            btnPlay.classList.add("is-playing");
+        }
         updatePlayButtonIcon();
         scheduleNextTick();
     }
 
     function pause() {
         isPlaying = false;
+        if (btnPlay) {
+            btnPlay.classList.remove("is-playing");
+        }
         if (playTimer) {
             clearTimeout(playTimer);
             playTimer = null;
@@ -834,7 +1069,16 @@ print("Is palindrome:", result)
         if (!isPlaying) return;
 
         const speed = parseFloat(speedSelect ? speedSelect.value : "1.0") || 1.0;
-        const delay = Math.round(700 / speed);
+        let delay = Math.round(700 / speed);
+
+        // If current step executed a swap operation, guarantee sufficient duration for visible flight and landing
+        const currentStep = (traceData && traceData.steps) ? traceData.steps[currentStepIndex] : null;
+        const hasSwap = currentStep && Array.isArray(currentStep.operations) && currentStep.operations.some(op => op.type === "swap");
+
+        if (hasSwap && window.XRayAnimator && window.XRayAnimator.getSwapDuration) {
+            const swapDur = window.XRayAnimator.getSwapDuration();
+            delay = Math.max(delay, swapDur + 120);
+        }
 
         if (playTimer) {
             clearTimeout(playTimer);
@@ -868,8 +1112,7 @@ print("Is palindrome:", result)
         traceData = null;
         currentStepIndex = 0;
         highlightEditorLine(null);
-        hasTriggeredDiwaliThisRun = false;
-        if (window.stopDiwaliSpark) window.stopDiwaliSpark();
+        hasTriggeredCompletionThisRun = false;
 
         // Reset transport controls
         if (btnFirst) btnFirst.disabled = true;
@@ -915,48 +1158,58 @@ print("Is palindrome:", result)
     }
 
     function handleClear() {
-        pause();
-        traceData = null;
-        currentStepIndex = 0;
-        hasTriggeredDiwaliThisRun = false;
-        if (window.stopDiwaliSpark) window.stopDiwaliSpark();
+        requestDiscardConfirmation(
+            "Are you sure you want to clear the editor? Your custom Python code will be erased.",
+            function () {
+                pause();
+                traceData = null;
+                currentStepIndex = 0;
+                hasTriggeredCompletionThisRun = false;
 
-        // Clear editor completely
-        setEditorCode("");
+                // Clear editor completely
+                setEditorCode("", true);
+                activePresetId = "";
 
-        if (presetSelect) {
-            presetSelect.value = "";
-        }
-        if (codeInput) {
-            codeInput.value = "";
-            codeInput.focus();
-        }
+                if (presetSelect) {
+                    presetSelect.value = "";
+                }
+                if (codeInput) {
+                    codeInput.value = "";
+                    codeInput.focus();
+                }
 
-        updateEditorGutter();
-        highlightEditorLine(null);
-        resetTraceVisuals();
-        clearSyntaxValidation();
-        updateStatus("CLEARED // EDITOR EMPTY");
+                updateEditorGutter();
+                highlightEditorLine(null);
+                resetTraceVisuals();
+                clearSyntaxValidation();
+                updateStatus("CLEARED // EDITOR EMPTY");
+            }
+        );
     }
 
     function handleResetExample() {
-        pause();
-        traceData = null;
-        currentStepIndex = 0;
-        hasTriggeredDiwaliThisRun = false;
-        if (window.stopDiwaliSpark) window.stopDiwaliSpark();
+        requestDiscardConfirmation(
+            "Reset editor back to the default Palindrome Check example? Your custom Python modifications will be discarded.",
+            function () {
+                pause();
+                traceData = null;
+                currentStepIndex = 0;
+                hasTriggeredCompletionThisRun = false;
 
-        setEditorCode(DEFAULT_PYTHON_EXAMPLE);
+                setEditorCode(DEFAULT_PYTHON_EXAMPLE, true);
+                activePresetId = "";
 
-        if (presetSelect) {
-            presetSelect.value = "";
-        }
+                if (presetSelect) {
+                    presetSelect.value = "";
+                }
 
-        updateEditorGutter();
-        highlightEditorLine(null);
-        resetTraceVisuals();
-        clearSyntaxValidation();
-        updateStatus("EXAMPLE RESET // PALINDROME CHECK");
+                updateEditorGutter();
+                highlightEditorLine(null);
+                resetTraceVisuals();
+                clearSyntaxValidation();
+                updateStatus("EXAMPLE RESET // PALINDROME CHECK");
+            }
+        );
     }
 
     // 9. CodeMirror Initialization
@@ -1061,7 +1314,7 @@ print("Is palindrome:", result)
         if (btnFirst) {
             btnFirst.addEventListener("click", function () {
                 pause();
-                if (window.stopDiwaliSpark) window.stopDiwaliSpark();
+                if (window.XRayAnimator && window.XRayAnimator.cancelAnimations) window.XRayAnimator.cancelAnimations();
                 goToStep(0);
             });
         }
@@ -1069,7 +1322,6 @@ print("Is palindrome:", result)
         if (btnPrev) {
             btnPrev.addEventListener("click", function () {
                 pause();
-                if (window.stopDiwaliSpark) window.stopDiwaliSpark();
                 goToStep(currentStepIndex - 1);
             });
         }
@@ -1083,7 +1335,6 @@ print("Is palindrome:", result)
         if (btnNext) {
             btnNext.addEventListener("click", function () {
                 pause();
-                if (window.stopDiwaliSpark) window.stopDiwaliSpark();
                 goToStep(currentStepIndex + 1);
             });
         }
@@ -1091,6 +1342,7 @@ print("Is palindrome:", result)
         if (btnLast) {
             btnLast.addEventListener("click", function () {
                 pause();
+                if (window.XRayAnimator && window.XRayAnimator.cancelAnimations) window.XRayAnimator.cancelAnimations();
                 if (traceData) goToStep(traceData.total_steps - 1);
             });
         }
@@ -1099,7 +1351,7 @@ print("Is palindrome:", result)
         if (timelineScrubber) {
             timelineScrubber.addEventListener("input", function () {
                 pause();
-                if (window.stopDiwaliSpark) window.stopDiwaliSpark();
+                if (window.XRayAnimator && window.XRayAnimator.cancelAnimations) window.XRayAnimator.cancelAnimations();
                 const step = parseInt(timelineScrubber.value, 10);
                 if (!isNaN(step)) {
                     goToStep(step);
@@ -1117,14 +1369,93 @@ print("Is palindrome:", result)
             });
         }
 
-        // Keyboard Shortcuts (Space, Left, Right, Home, End, Ctrl+Enter)
+        // Discard Confirmation Modal Events
+        if (confirmModalClose) {
+            confirmModalClose.addEventListener("click", function () {
+                closeConfirmModal(false);
+            });
+        }
+        if (confirmModalCancel) {
+            confirmModalCancel.addEventListener("click", function () {
+                closeConfirmModal(false);
+            });
+        }
+        if (confirmModalProceed) {
+            confirmModalProceed.addEventListener("click", function () {
+                closeConfirmModal(true);
+            });
+        }
+        if (confirmModal) {
+            confirmModal.addEventListener("click", function (e) {
+                if (e.target === confirmModal) {
+                    closeConfirmModal(false);
+                }
+            });
+        }
+
+        // Keyboard Shortcuts Reference Modal Events
+        if (btnShortcutsHelp) {
+            btnShortcutsHelp.addEventListener("click", function () {
+                openShortcutsModal();
+            });
+        }
+        if (shortcutsModalClose) {
+            shortcutsModalClose.addEventListener("click", function () {
+                closeShortcutsModal();
+            });
+        }
+        if (shortcutsModalDismiss) {
+            shortcutsModalDismiss.addEventListener("click", function () {
+                closeShortcutsModal();
+            });
+        }
+        if (shortcutsModal) {
+            shortcutsModal.addEventListener("click", function (e) {
+                if (e.target === shortcutsModal) {
+                    closeShortcutsModal();
+                }
+            });
+        }
+
+        // Keyboard Shortcuts (Space, Left, Right, Home, End, Ctrl+Enter, ?, Esc for modals)
         window.addEventListener("keydown", function (e) {
+            if (shortcutsModal && shortcutsModal.classList.contains("is-open")) {
+                if (e.key === "Escape") {
+                    e.preventDefault();
+                    closeShortcutsModal();
+                    return;
+                }
+                if (e.key === "Tab") {
+                    trapFocusInModal(shortcutsModal, e);
+                }
+                return;
+            }
+
+            if (confirmModal && confirmModal.classList.contains("is-open")) {
+                if (e.key === "Escape") {
+                    e.preventDefault();
+                    closeConfirmModal(false);
+                    return;
+                }
+                if (e.key === "Tab") {
+                    trapFocusInModal(confirmModal, e);
+                }
+                return;
+            }
+
             const isEditing = (document.activeElement === codeInput) || (cmEditor && cmEditor.hasFocus());
 
             // Allow Ctrl+Enter or Cmd+Enter to trigger Visualize Code anytime
             if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
                 e.preventDefault();
                 runTrace();
+                return;
+            }
+
+            // If ? pressed while not editing code, open keyboard shortcuts dialog
+            if (!isEditing && e.key === "?") {
+                e.preventDefault();
+                openShortcutsModal();
                 return;
             }
 
@@ -1160,8 +1491,12 @@ print("Is palindrome:", result)
         initEvents();
         initCodeMirror();
 
+        if (window.XRayAnimator && window.XRayAnimator.init) {
+            window.XRayAnimator.init();
+        }
+
         // Populate Custom Code Playground with default introductory example
-        setEditorCode(DEFAULT_PYTHON_EXAMPLE);
+        setEditorCode(DEFAULT_PYTHON_EXAMPLE, true);
 
         updateEditorGutter();
         syncEditorScroll();

@@ -7,22 +7,24 @@
 * **Architecture:** Python backend (`sys.settrace`, AST inspection, zero external tracer dependencies, Flask API server) + Industrial Dark Grid Vanilla Frontend.
 
 ## 2. Current State
-* **Active Phase:** Custom Code Playground Implementation as Primary Experience Complete.
-* **Backend Status:** Added `POST /api/validate` for real-time Python AST syntax pre-validation returning line and column offsets. Configured `POST /api/trace` to accept custom Python code (`{"code": "..."}`) or allowlisted preset IDs (`{"preset_id": "..."}`) with bounded resource limits (10,000 characters, 128 KB payload limit, 1,000 step ceiling, 2.0s wall-clock timeout, 20 KB stdout limit). Gated local execution and fail-closed Judge0 container sandbox adapter supported.
+* **Active Phase:** Phase 2 Unified Animation System Complete on branch `phase-2-animation-system`.
+* **Backend Status:** `POST /api/validate` and `POST /api/trace` with custom Python code execution, 25 algorithm allowlist, AST pre-flight validation, resource guards, and sandbox support verified.
 * **Frontend Status:** 
-  * Custom Code Playground is now the default landing experience when opening Code X-Ray.
-  * Added CodeMirror Python editor with syntax highlighting, line numbers, automatic indentation, bracket matching, and dark industrial theme token alignment.
-  * Integrated introductory default Python example (`DEFAULT_PYTHON_EXAMPLE`) into editor upon initial page load.
-  * Editor controls updated: primary CTA **Visualize Code** (`#btn-run`), **Reset Example** (`#btn-reset-example`), and **Clear** (`#btn-clear`).
-  * 25 preloaded DSA problems moved to secondary section **Explore Examples** (`#preset-select`) accessible via top navigation tab or selector, loading into editor for user inspection, editing, and visualization.
-  * Added inline validation feedback banner (`#validation-banner`) and syntax status badge (`#syntax-status-badge`) highlighting syntax error line and column before execution.
-  * Preserved full visualization capabilities: active execution line highlighting (`#d29922`), step-by-step playback transport, live memory diffing (`NEW` vs `2 → 3`), sequence and pointer stage centering, and Diwali celebration completion sparks.
-* **Tests Status:** 50/50 tests passing cleanly in ~0.9s across:
-  * `test_app.py` (16 tests: health check, preset listing, AST syntax validation, custom code execution, syntax error handling, empty code validation, 25 preset runs, oversized payload 413, rate limiter 429, template routes, favicon).
-  * `test_presets.py` (7 tests verifying 1:1 match between `presets.js` and `presets_data.py` across all 6 categories).
-  * `test_frontend_integration.py` (11 tests: custom code playground UI elements, layout, editor gutter, console height, sequence stage centering, playback timers, memory map diffs, spark canvas).
-  * `test_sandbox_adapter.py` (7 tests: standalone unit tests for the preserved fallback adapter).
-  * `test_tracer.py` (9 tests: execution tracing, recursion protection, timeout, step limits, stdout capture, and truncation).
+  * Custom Code Playground as default landing experience with CodeMirror editor and introductory palindrome example.
+  * Phase 2 Unified Animation System implemented in `static/js/animator.js` and `static/css/styles.css`.
+  * Pointer gliding animations across memory blocks using FLIP technique (`translateX`).
+  * Memory cell mutation pulses (`blockMutatePulse`) and smooth enter transitions.
+  * Memory map table row transitions and mutation highlighting.
+  * Active line execution transitions in CodeMirror and fallback gutter.
+  * Speed-adaptive animation durations (`--anim-duration`) synchronized with `speedSelect`.
+  * Accessibility: full `prefers-reduced-motion` instantaneous transition support.
+  * Timeline scrubbing cancellation guards preventing animation overlapping.
+* **Tests Status:** 51/51 tests passing cleanly in ~0.38s across:
+  * `test_app.py` (16 tests).
+  * `test_presets.py` (7 tests).
+  * `test_frontend_integration.py` (12 tests including Phase 2 animation contracts).
+  * `test_sandbox_adapter.py` (7 tests).
+  * `test_tracer.py` (9 tests).
 
 ## 3. Completed Tasks
 * Phase 0: Defined master architecture and phased implementation plan.
