@@ -14,8 +14,8 @@ X-Ray steps through Python execution line by line, capturing variable snapshots,
 * **Canonical Preset Library (`presets_data.py` & `static/js/presets.js`)**: 25 preloaded DSA algorithm practice problems accessible via the secondary "Explore Examples" dropdown.
 * **Runtime Interception Engine (`tracer.py`)**: Uses Python's native `sys.settrace` frame hooks, AST parsing, and stdout redirection to capture deterministic execution snapshots in under 0.05 seconds.
 * **Backend Application Server (`app.py`)**: Lightweight Flask HTTP service providing `/api/trace`, `/api/validate`, `/api/presets`, and `/api/health` endpoints with strict input validation and structured error responses.
-* **Frontend Interface (`templates/index.html`, `static/css/styles.css`, `static/js/app.js`)**: Industrial dark-grid developer interface with synchronized code editor, memory map, sequence and pointer stage, console, and playback transport bar.
-* **Celebration Canvas (`static/js/spark.js`)**: Canvas-based particle burst animation celebrating successful algorithm execution completion.
+* **Frontend Interface (`templates/index.html`, `static/css/styles.css`, `static/js/app.js`)**: Nordic Deep Slate developer interface with synchronized code editor, memory map, sequence and pointer stage, console, and playback transport bar.
+* **Unified Animation System (`static/js/animator.js`)**: Physics-inspired projectile swap animations, FLIP pointer transitions, operation-aware motion timing, rapid-navigation cancellation, and reduced-motion support.
 * **Sandbox Adapter (`sandbox_adapter.py`)**: Isolated Judge0 CE adapter with fail-closed security for containerized multi-tenant execution.
 
 ---
@@ -87,11 +87,11 @@ Run the complete regression test suite using Python's standard `unittest` runner
 python -m unittest discover -v
 ```
 
-The test suite covers 50 automated tests:
+The test suite covers the backend, tracer, sandbox, preset, and frontend integration contracts:
 * `test_app.py`: Health checks, custom code execution, AST syntax validation, empty code handling, preset execution, oversized payload limits, rate limiting, template rendering, and SVG favicon delivery.
 * `test_presets.py`: 1:1 schema and content verification between frontend `presets.js` and backend `presets_data.py` across all 25 algorithms.
 * `test_tracer.py`: Runtime tracing, dual loop kill switches (step limit and wall-clock timeout), pointer heuristics, sequence extraction, stdout capture, stdout truncation, and recursion depth protection.
-* `test_frontend_integration.py`: Custom Code Playground UI elements, editor gutter styling, high-contrast active-line highlight, 2-column grid layout, auto-playback mechanics, and Diwali celebration canvas scripts.
+* `test_frontend_integration.py`: Custom Code Playground UI elements, editor gutter styling, dirty-state protection, keyboard shortcuts, high-contrast active-line highlight, 2-column grid layout, auto-playback mechanics, reduced-motion behavior, and the unified animation system.
 * `test_sandbox_adapter.py`: Standalone unit tests verifying the fallback sandbox adapter.
 
 ---
@@ -104,6 +104,7 @@ The test suite covers 50 automated tests:
 * Real-time AST syntax validation reports exact line and column errors before execution.
 * Click **Reset Example** to restore the introductory two-pointer palindrome demonstration.
 * Click **Clear** to wipe the editor and visualizer for a fresh script.
+* Changing examples or clearing/resetting modified code prompts for confirmation so unsaved work is not lost.
 
 ### 2. Explore Examples (25 Preloaded Problems)
 Select any problem from the "Explore Examples" dropdown to load its code into the editor:
@@ -122,7 +123,15 @@ Select any problem from the "Explore Examples" dropdown to load its code into th
   * Unchanged variables remain visually muted.
 * **Sequence & Pointer Stage**: Automatically detects 1D and 2D arrays and binds pointer indices (`left`, `right`, `i`, `j`, `mid`) directly to active visual cells.
 * **Console Output**: Live incremental standard output capture from `print()` statements.
-* **Transport Controls**: Jump to First Step, Step Back, Play/Pause, Step Forward, Jump to Last Step, and adjustable playback speed slider (0.25x to 4.0x).
+* **Transport Controls**: Jump to First Step, Step Back, Play/Pause, Step Forward, Jump to Last Step, a timeline scrubber, and adjustable playback speed from 0.5x to 2.0x.
+* **Animation Feedback**: Pointer indicators glide between cells, while swap operations animate two values along curved foreground and background trajectories without mutating trace data.
+* **Motion Preferences**: Animations respect `prefers-reduced-motion` and are cancelled during rapid navigation so the displayed execution state stays synchronized.
+* **Keyboard Shortcuts**: `Ctrl+Enter` visualizes code, `Space` toggles playback, arrow keys step through execution, `Home` and `End` jump to the first and last steps, `?` opens the shortcut reference, and `Esc` closes dialogs.
+
+### 4. Interface Design
+* Dense, high-contrast Nordic Deep Slate theme with functional amber, green, blue, and crimson state accents.
+* CodeMirror editor with synchronized line numbers, active-line highlighting, inline syntax errors, automatic indentation, and bracket matching.
+* Responsive two-column workspace with accessible labels, tooltips, focus-managed dialogs, and sharp geometric controls.
 
 ---
 
