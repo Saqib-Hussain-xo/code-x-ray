@@ -1,90 +1,114 @@
-# Code X-Ray: Architecture & System Design
+# Code X-Ray: Architecture and System Design
 
-Code X-Ray is an interactive, deterministic execution visualizer and educational code debugger for Data Structures and Algorithms (DSA) in Python.
+Code X-Ray is an interactive Python execution visualizer. Its architecture separates static source analysis, runtime capture, semantic enrichment, and browser presentation.
 
----
+## 1. System topology
 
-## 1. System Topology
-
-```
-+-----------------------------------------------------------------------------------+
-|                                 USER BROWSER                                      |
-|                                                                                   |
-|  [ CodeMirror Editor ] <========> [ Playback Controller / Animator ]             |
-|          |                                        |                               |
-|          | (User Code / Stdin)                    | (Events, Snapshots, Metrics)  |
-|          v                                        v                               |
-|  [ /api/trace ] [ /api/validate ] [ /api/compare ] [ /api/batch-test ]            |
-+-----------------------------------------------------------------------------------+
-                                   |  HTTP JSON API
-                                   v
-+-----------------------------------------------------------------------------------+
-|                             BACKEND RUNTIME (app.py)                              |
-|                                                                                   |
-|  +--------------------+   +-----------------------+   +------------------------+  |
-|  |  ExecutionTracer   |   |  AlgorithmRecognizer  |   |   ComplexityAnalyzer   |  |
-|  |    (tracer.py)     |   |    (recognizer.py)    |   |     (analyzer.py)      |  |
-|  +--------------------+   +-----------------------+   +------------------------+  |
-|            |                          |                            |              |
-|            v                          v                            v              |
-|  +--------------------+   +-----------------------+   +------------------------+  |
-|  |   StepExplainer    |   |    ErrorDetective     |   |  ComparisonEngine      |  |
-|  |   (explainer.py)   |   |   (diagnostics.py)    |   |    (comparison.py)     |  |
-|  +--------------------+   +-----------------------+   +------------------------+  |
-+-----------------------------------------------------------------------------------+
+```text
+Browser
+  | CodeMirror editor, input, playback controls
+  v
+Flask application (app.py)
+  |-- /api/validate --> Python AST syntax validation
+  |-- /api/presets  --> allowlisted preset metadata
+  |-- /api/trace
+  |     |-- local route --> ExecutionTracer (tracer.py)
+  |     |-- sandbox route --> Judge0SandboxAdapter (sandbox_adapter.py)
+  |                              |-- runner submitted to Judge0
+  |                              <-- serialized trace in provider output
+  |-- /api/compare --> comparison.py
+  |-- /api/batch-test --> repeated test-case execution
+  |-- recognizer.py: AST pattern recognition
+  |-- analyzer.py: static complexity estimates
+  |-- explainer.py: step explanations
+  |-- diagnostics.py: error diagnostics
+  v
+JSON response --> browser timeline
+  |-- static/js/app.js
+  |-- static/js/animator.js
+  |-- static/js/matrix-stage.js
+  |-- templates/index.html
+  |-- static/css/styles.css
 ```
 
----
+Judge0 receives a packaged runner remotely. It does not call back into Flask's local `ExecutionTracer`; Flask decodes and parses the trace returned by the provider.
 
-## 2. Core Modules
+## 2. Backend modules
 
-### 2.1 Runtime Interception Engine (`tracer.py`)
-- Leverages Python's native `sys.settrace` callback dispatch for line-by-line frame inspection.
-- Captures serializable local variable states, memory diffs, sequence structures (1D arrays and 2D matrices), pointer variable tracking, standardized execution events, and call stacks.
-- Enforces strict dual kill switches:
-  - Step Limit: maximum 1000 steps (configurable).
-  - Wall-clock Limit: maximum 2.0 seconds execution cutoff.
-  - Recursion Limit: bounded recursion depth protection (500 frames) prevents process stack exhaustion.
-- Operation Tracking: tracks live runtime metrics for comparisons, swaps, assignments, array accesses, loop iterations, function calls, and recursive calls.
+- **`app.py`:** Flask application, HTML routes, REST endpoints, request validation, rate limiting, and execution-route selection.
+- **`tracer.py`:** `sys.settrace` runtime capture; local-variable snapshots, stdout, sequence/matrix data, pointer candidates, call-stack information, operation evidence, semantic events, and configured execution limits.
+- **`recognizer.py`:** AST pattern recognition and confidence information. Recognition does not prove algorithm correctness.
+- **`analyzer.py`:** Static AST estimates of time and auxiliary-space complexity. These are heuristics, not measurements or formal proofs.
+- **`explainer.py`:** Human-readable step explanations based on trace events and source context.
+- **`diagnostics.py`:** Explanations and suggestions for supported syntax/runtime errors.
+- **`comparison.py`:** Executes two implementations on equivalent inputs and reports output agreement and observed operation deltas.
+- **`sandbox_adapter.py`:** Builds a runner, submits it to Judge0, decodes the provider response, and extracts the serialized trace.
 
-### 2.2 AST Algorithm Recognition (`recognizer.py`)
-- Inspects code structure using standard library `ast.walk` and pattern visitors.
-- Detects nested iteration passes, tuple swaps, binary search mid-calculation and interval narrowing, sentinel checks, 2D matrix indexing, and recursion.
-- Categorizes algorithms with confidence scoring and classifies visualization profiles: `sorting`, `searching`, `matrix`, `recursion`, `two_pointers`, `sliding_window`, and `generic`.
+### Frontend modules
 
-### 2.3 Step-by-Step Explanations (`explainer.py`)
-- Synthesizes clear, beginner-friendly textual narratives explaining each execution step.
-- Converts normalized events (`compare`, `swap`, `mutation`, `matrix_access`, `search_range`, `visit`, `found`) into educational English text.
+- `templates/index.html`: workspace structure, navigation, panels, and dialogs.
+- `static/js/app.js`: application state, editor integration, execution requests, playback, and timeline rendering.
+- `static/js/animator.js`: sequence/pointer visual transitions.
+- `static/js/matrix-stage.js`: 2D matrix rendering.
+- `static/css/styles.css`: layout, tokens, semantic states, responsive behavior, and reduced-motion rules.
 
-### 2.4 Error Detective (`diagnostics.py`)
-- Intercepts syntax errors and runtime exceptions (`IndexError`, `ZeroDivisionError`, `NameError`, `TypeError`, `RecursionError`, `TraceLimitExceeded`).
-- Generates beginner-friendly explanations with actionable suggestions and line-targeted remediation tips.
+## 3. Execution lifecycle
 
-### 2.5 Complexity Analyzer (`analyzer.py`)
-- Analyzes loop nesting depth, logarithmic steps, dynamic allocations, and recognized algorithm families.
-- Computes estimated Big-O time and auxiliary space complexity.
-- Pairs static estimates with measured runtime operation metrics and appropriate educational disclaimers.
+1. Browser submits source or a preset identifier to `POST /api/trace`.
+2. Flask validates the payload and parses source with Python AST.
+3. Flask selects local tracing or remote Judge0 according to routing conditions.
+4. The selected execution path produces a trace result.
+5. Recognition, complexity estimates, explanations, diagnostics, and metadata are attached where available.
+6. Flask returns JSON.
+7. The frontend renders the selected timeline step. Rewinding must remove semantic states whose events lie in the future.
 
-### 2.6 Comparative Execution Engine (`comparison.py`)
-- Executes two code snippets on equivalent input under sandbox safety guards.
-- Verifies output equivalence (stdout and terminal variables).
-- Calculates operation deltas (comparisons, swaps, assignments, loops, total steps).
-- Generates balanced qualitative verdicts without unproven performance claims.
+## 4. Execution routing and trust boundaries
 
-### 2.7 Frontend Architecture
-- `templates/index.html`: semantic HTML5 workspace layout with CodeMirror editor, 2D matrix stage, 1D sequence stage, call stack, operation counters, and accessible modal dialogs.
-- `static/css/styles.css`: Nordic Deep Slate industrial design system, CSS custom properties, micro-typography tokens (`--font-size-xs`, `--font-size-xxs`, `--font-size-micro`), high-contrast active lines, and reduced-motion compliance.
-- `static/js/app.js`: central application state machine controlling playback transport, CodeMirror integration, breakpoints, variable watchpoints, time travel bookmarks, test cases, and glossary.
-- `static/js/matrix-stage.js`: dedicated 2D matrix visualizer rendering grid rows, columns, coordinate badges, and cell access highlights.
-- `static/js/animator.js`: DOM coordinate projection and projectile swap physics engine.
+Current `app.py` conditions:
 
----
+- Trace route defaults `XRAY_EXECUTION_MODE` to `local`.
+- `XRAY_ALLOW_LOCAL_EXEC` defaults to `true`.
+- Allowlisted presets always use `ExecutionTracer`.
+- Custom code uses `ExecutionTracer` when local execution is allowed, when mode is `local`, or when Flask is running tests.
+- Only custom-code requests outside tests reach `Judge0SandboxAdapter` when local execution is disabled and mode is not `local`.
 
-## 3. Data Flow & Event Lifecycle
+Therefore, `XRAY_EXECUTION_MODE=production` alone does **not** force sandbox execution while `XRAY_ALLOW_LOCAL_EXEC=true`. To route custom code through Judge0, set `XRAY_ALLOW_LOCAL_EXEC=false`, choose a non-local mode, and configure `JUDGE0_API_URL` plus provider credentials if required.
 
-1. **Submission**: User code is submitted via `/api/trace` or `/api/validate`.
-2. **Pre-Validation**: AST parser inspects syntax, loops, and algorithm patterns.
-3. **Execution**: `ExecutionTracer` instruments frames via `sys.settrace`, redirecting stdout and tracking cumulative operation metrics.
-4. **Enrichment**: Diagnostician attaches error root-cause advice if exceptions occur; Recognizer and Explainer annotate steps with narratives; Analyzer computes Big-O bounds.
-5. **Serialization**: JSON timeline payload is delivered to frontend and loaded into the timeline scrubber.
-6. **Visualization**: Scrubber updates CodeMirror active line, memory map, sequence/matrix stage, console, operation counter pills, and call stack in lockstep.
+The health endpoint independently reports `XRAY_EXECUTION_MODE` with fallback `playground`; the trace route uses `local`.
+
+### Remote request path
+
+```text
+Browser -> Flask /api/trace -> Judge0SandboxAdapter
+       -> runner submitted to Judge0
+       <- encoded provider output containing delimited trace JSON
+       -> Flask decodes/parses trace
+       -> Browser renders timeline
+```
+
+## 5. Semantic event model
+
+The eight primary visual cell states are `neutral`, `active`, `visited`, `modified`, `discovered`, `found`, `finalized`, and `rejected`.
+
+The tracer may also emit lifecycle events such as `completed`. Do not conflate those event types with persistent cell states.
+
+- **Search:** Only the current inspection may receive transient active styling; earlier inspected elements return to neutral. Green is reserved for a runtime-confirmed match.
+- **Sorting:** Green finality requires evidence that the final position is proven, not merely that an element was compared or moved.
+- **Timeline:** State is derived from events up to the selected step. Rewinding removes future states; reset clears the visualization.
+
+## 6. Analysis versus observation
+
+1. **Static analysis:** syntax validation, AST recognition, and estimated complexity.
+2. **Runtime capture:** line/frame events, snapshots, stdout, and observed operation counts.
+3. **Semantic enrichment:** explanations and visual-state events derived from source context and runtime evidence.
+4. **Presentation:** frontend rendering of the captured trace.
+
+Complexity is estimated statically. Operation counters describe one run. Neither proves theoretical performance.
+
+## 7. Security model
+
+The in-process tracer is not a secure sandbox. AST validation, request/rate limits, step limits, and wall-clock limits are application safeguards only. They do not isolate arbitrary Python from OS access. Use remote Judge0 for untrusted custom code in multi-tenant deployment and verify local execution is disabled in the deployed environment.
+
+## 8. Deployment
+
+Vercel uses `api/index.py` as its Python entry point; `vercel.json` rewrites requests to that function. `Procfile` and `render.yaml` are manifests for a separate hosting workflow, not part of Vercel routing.

@@ -1,86 +1,86 @@
-# Technical Decisions Record: X-Ray Execution Agent
+# Technical Decisions Record: Code X-Ray
 
-## ADR-001: Tracer Interception Architecture
-* **Date:** 2026-10-29
-* **Decision:** Use Python standard library `sys.settrace` combined with `io.StringIO` stdout redirection and `ast` validation.
-* **Context:** The engine must inspect line-by-line runtime state without bloated third-party dependencies (such as debugger daemons, gdb, or heavy bytecode instruments).
-* **Consequences:** Minimal dependency footprint, cross-platform portability, deterministic execution timeline capture. Requires careful handling of internal tracer frame filtering to capture only user code lines.
+This file records the reasoning behind implementation choices. Older entries may describe an earlier project state. The **Current implementation clarifications** section takes precedence wherever a historical ADR conflicts with the current source tree.
 
-## ADR-002: Infinite Loop and Resource Bound Guard
-* **Date:** 2026-10-29
-* **Decision:** Enforce a dual-tier safeguard: maximum 1,000 trace steps and 2.0-second wall-clock timeout.
-* **Context:** User code containing infinite `while` loops, runaway recursion, or sentinel errors must not lock or crash the backend worker process.
-* **Consequences:** Graceful termination of unresponsive executions with structured error payloads (`status: "timeout"` or `status: "step_limit_exceeded"`), allowing users to debug runaway loops up to the exact point of interruption.
+## ADR-001: Runtime interception
+- **Decision:** Use Python `sys.settrace`, stdout capture, and AST parsing.
+- **Reason:** Capture line-level runtime state without a heavyweight debugger dependency.
+- **Trade-off:** Tracing is line/frame based; semantic operations require enrichment and should not be presented as native events unless supported by runtime evidence.
 
-## ADR-003: Pointer and Sequence Binding Heuristic
-* **Date:** 2026-10-29
-* **Decision:** Dynamically identify integer variables whose names match pointer conventions (`i`, `j`, `k`, `left`, `right`, `l`, `r`, `low`, `high`, `mid`, `slow`, `fast`, `start`, `end`, `idx`) or whose values fall within `[0, len(seq)]`, and map them to their corresponding sequence (`list`, `str`, `tuple`).
-* **Context:** DSA algorithms rely heavily on index pointers. Visualizing these pointers directly above/below the memory blocks makes algorithmic operations immediately legible.
-* **Consequences:** Backend passes structured `pointers` arrays per step, relieving the frontend from complex sequence-pointer deduction logic.
+## ADR-002: Execution limits
+- **Decision:** Apply a maximum of 1,000 trace steps and a 2-second wall-clock limit in the in-process tracer.
+- **Reason:** Bound ordinary educational runs and stop runaway examples.
+- **Trade-off:** These are application-level limits, not an OS sandbox or a guarantee against every hostile workload. Do not advertise a fixed millisecond termination guarantee.
 
-## ADR-004: Zero Third-Party UI Frameworks (Vanilla Web Stack)
-* **Date:** 2026-10-29
-* **Decision:** Build the frontend with semantic HTML5, strict CSS Grid/Custom Properties, and modular Vanilla ES6 JavaScript.
-* **Context:** Avoid build pipeline complexity, npm bundle bloat, and framework abstraction overhead.
-* **Consequences:** Instant load times, high rendering performance during timeline scrubbing, complete control over sharp geometric rendering.
+## ADR-003: Pointer and sequence binding
+- **Decision:** Infer likely pointer variables from names and values, then associate them with visible sequences.
+- **Reason:** Index variables are central to common DSA algorithms.
+- **Trade-off:** This is heuristic. A variable name or an integer falling within a sequence's index range does not prove semantic intent. The UI must not present uncertain associations as guaranteed facts.
 
-## ADR-005: Backend Framework Choice
-* **Date:** 2026-10-29
-* **Decision:** Use Python `Flask` (with lightweight virtual environment or standard library fallback) serving clean JSON endpoints and static assets.
-* **Context:** Minimalist REST API architecture supporting `/api/trace`, `/api/health`, `/privacy`, and `/terms`.
-* **Consequences:** Clean separation of concerns, native static asset hosting, simple deployment readiness.
+## ADR-004: Vanilla frontend
+- **Decision:** Use semantic HTML, CSS custom properties, and modular vanilla JavaScript.
+- **Reason:** Keep the client lightweight and avoid a build pipeline.
+- **Trade-off:** UI state and DOM contracts must be maintained explicitly across modules.
 
-## ADR-006: Independent 2-Column Flex-Column CSS Grid Layout Architecture
-* **Date:** 2026-10-29
-* **Decision:** Structure the main application workspace as a 2-column grid (`minmax(420px, 1fr) minmax(480px, 1.2fr)`), where each column is an independent vertical flex container (`display: flex; flex-direction: column`).
-* **Context:** In a traditional 2x2 grid, row heights are tightly coupled across columns, locking the Console panel to the exact height of the Sequence & Pointer Stage. The user experience requires the sequence stage to have substantial vertical space (expanded to ~64% column height) for pointer tracks and array cells, while the left column needs the code editor to have primary height (~60%) and the console to have compact auxiliary height (~40%).
-* **Consequences:** Complete vertical height independence between the left and right panels, zero grid overflow, and clean responsive collapse to a single column on tablet/mobile screens (<= 1024px).
+## ADR-005: Flask API
+- **Decision:** Use Flask for HTML routes and JSON endpoints.
+- **Reason:** Provide a small Python backend that shares tracing implementation with local development.
 
-## ADR-007: Preset Synchronization and Non-Destructive Default State Handling
-* **Date:** 2026-10-29
-* **Decision:** Model the preset selector with a non-destructive default empty option (`<option value="" selected>Load Algorithm Preset...</option>`), explicit re-selection handling, and clean state resets in `#btn-clear`.
-* **Context:** Previously, clearing code or re-selecting the currently selected preset failed to fire browser `change` events because the select element's value remained set to the prior preset key, and a `disabled` default option prevented programmatic reset.
-* **Consequences:** Selecting, re-selecting, clearing, and typing custom algorithms in the editor operate reliably without desync, without auto-triggering network execution, and without destroying in-progress custom code unless explicitly requested.
+## ADR-006: Independent workspace columns
+- **Decision:** Use a responsive two-column workspace with independent vertical panel stacks.
+- **Reason:** Editor/console and runtime visualization need different height allocations.
+- **Trade-off:** Responsive breakpoints must preserve usable controls on narrower screens.
 
-## ADR-008: Non-Destructive Synchronized Textarea Highlighting and Gutter Layer
-* **Date:** 2026-10-29
-* **Decision:** Implement current-line highlighting and line numbers via a dual-layer architecture: a companion gutter `.editor-gutter` and an absolute highlight backdrop `.editor-highlight-layer` synchronized via scroll and input listeners to a native transparent `<textarea id="code-input">`. Active line uses high-contrast amber (`rgba(210, 153, 34, 0.32)` background, `4px solid #d29922` left border), accompanied by an active gutter indicator (`▶` with gold number `#ffd166`).
-* **Context:** A plain `<textarea>` cannot format individual lines directly. Native selections (`setSelectionRange`) hijack the user's cursor and destroy text selections during timeline scrubbing and auto-playback. Full code-editor libraries (e.g. Monaco/CodeMirror) introduce massive bundle weights. Previous low-opacity overlay (12%) was mathematically indistinguishable from background canvas, and calling position calculations before `scrollTop` adjustment caused vertical misalignment.
-* **Consequences:** 100% native editing, copy/paste, and tab indentation preserved; cursor position and selection remain untouched during playback; line numbers and bold amber active bar `#d29922` scroll in lockstep with zero layout jitter; code transmitted untrimmed preserves 1-based line alignment.
+## ADR-007: Preset synchronization
+- **Decision:** Keep a canonical backend preset allowlist and synchronize it with the frontend.
+- **Reason:** Presets should be predictable and repeatable.
+- **Trade-off:** The preset API returns metadata summaries; clients should not assume it exposes all source code.
 
-## ADR-009: In-Process Execution Hardening vs. OS Sandboxing Architecture
-* **Date:** 2026-10-29
-* **Decision:** Implement safe in-process boundaries (Flask `MAX_CONTENT_LENGTH` 128 KB, 10,000 code character limit, 20,000 stdout character limit, 500-frame recursion limit, sanitized error returns) while strictly avoiding flawed "AST built-in filtering" pseudo-sandboxing; explicitly document the boundary requiring OS-level isolation (e.g. gVisor, nsjail, Firecracker) for multi-tenant deployment.
-* **Context:** Python's in-process `exec()` cannot be safely isolated from arbitrary syscalls, filesystem I/O, or network sockets via AST or `__builtins__` restrictions. Naive keyword/AST whitelisting is easily bypassed via subclass gadget chains and creates a false sense of security. True isolation requires operating system process boundaries.
-* **Consequences:** Local and educational usage is protected against denial-of-service, runaway memory from giant payloads/print loops, and C-stack overflow, while clear architectural guidelines prevent unsafe deployment in multi-tenant production without external sandboxing.
+## ADR-008: Code editor
+- **Decision:** Use CodeMirror 5 for the editable Python workspace.
+- **Reason:** Syntax highlighting, line numbers, indentation, and editor behavior without a frontend build framework.
+- **Historical note:** Earlier descriptions referring to a native textarea/highlight overlay are obsolete.
 
+## ADR-009: In-process safeguards versus isolation
+- **Decision:** Keep AST validation, request-size limits, output limits, rate limiting, and tracer limits as defensive application safeguards.
+- **Reason:** Reduce accidental resource exhaustion and malformed requests.
+- **Trade-off:** Python executed in the web process is not safely isolated from OS access. AST filtering or restricted builtins are not a secure sandbox.
 
-## ADR-010: Non-Intrusive Canvas Spark Architecture for Execution Completion
-* **Date:** 2026-10-29
-* **Decision:** Implement the Diwali celebration spark effect via a lightweight fixed HTML5 canvas (`static/js/spark.js`) with `pointer-events: none` and an auto-terminating particle animation loop.
-* **Context:** Successful algorithm completion requires celebratory feedback while strictly adhering to industrial tool performance and accessibility standards.
-* **Consequences:** Zero UI click interference; stops instantly on manual scrub, clear, or step back; automatically halts animation loops when particles decay (~2.5s) to prevent memory or CPU leaks; respects `prefers-reduced-motion`.
+## ADR-010: Celebration canvas
+- **Historical proposal:** An earlier iteration referenced a canvas spark effect in `static/js/spark.js`.
+- **Current status:** That file is absent from the current tracked frontend. Do not describe the effect as active unless the implementation is restored.
 
-## ADR-011: Isolated Remote Sandbox Adapter with Fail-Closed Enforcement
-* **Date:** 2026-10-29
-* **Decision:** Integrate a dedicated remote sandbox adapter (`sandbox_adapter.py`) targeting Judge0 CE containerized runtimes for public code evaluation. The Flask web process defaults to sandbox mode and enforces fail-closed behavior: under no circumstances does it fall back to in-process `exec()` if the remote sandbox is unconfigured or fails. In-process execution is restricted to explicitly authorized local developer environments (`XRAY_EXECUTION_MODE=local` and `XRAY_ALLOW_LOCAL_EXEC=true`).
-* **Context:** Public exposure of arbitrary Python code execution requires strict OS and container isolation. Self-contained execution runner scripts embed the standard-library tracer and return delimited JSON to the web tier. Sliding-window rate limiting (20 req/min/IP) prevents free-tier quota exhaustion.
-* **Consequences:** Safe public web tier deployment; zero host process vulnerability to arbitrary code execution; complete preservation of the existing frontend trace JSON schema.
+## ADR-011: Judge0 adapter
+- **Decision:** Keep a Judge0 adapter for remote, containerized execution when the route selects it.
+- **Reason:** Untrusted custom code requires an execution boundary outside Flask.
+- **Trade-off:** The adapter depends on a configured provider endpoint and credentials where required. Its presence does not mean every request automatically uses Judge0.
 
-## ADR-012: Vercel Serverless Deployment with Allowlisted Preset Execution
-* **Date:** 2026-10-29
-* **Decision:** Deploy the application as a single Vercel project combining the static frontend and Python serverless API (`api/index.py` via `vercel.json`). Restrict execution strictly to a canonical backend allowlist of 25 pre-approved algorithms (`presets_data.py`). Submitting arbitrary Python code is explicitly rejected with HTTP 400 (`ARBITRARY_CODE_EXECUTION_DISABLED`). Trusted preset code is traced directly via in-process `tracer.py`.
-* **Context:** Free-tier multi-service deployments (e.g. Vercel frontend + Render backend) suffer from 50 to 90 second spin-up cold starts, cross-origin preflight overhead, and external code execution API rate limits (e.g. Judge0 free tiers). For demonstration and educational showcase purposes, hosting frontend and API on the same Vercel origin provides instant sub-second responses, zero infrastructure cost, and absolute security against remote code execution because the server only executes frozen, vetted algorithm code.
-* **Consequences:** Single repository and single Vercel deployment; instant zero-cold-start execution; 100% immune to arbitrary code injection; frontend editor functions in read-only mode with clear preset runner branding; all visual debugging, memory diffs, pointer bindings, step scrubbing, playback, and Diwali animations function identically to previous iterations. Remote sandbox adapter (`sandbox_adapter.py`) and Render manifests (`render.yaml`, `Procfile`) remain preserved in the codebase as inactive reference assets for future multi-tenant sandbox upgrades.
+## ADR-012: Vercel entry point
+- **Decision:** Use `api/index.py` as the Python serverless entry point, with `vercel.json` rewriting requests to it.
+- **Reason:** Serve frontend and API from the same Vercel project.
+- **Trade-off:** `Procfile` and `render.yaml` describe a separate hosting path; they are not part of Vercel routing.
 
-## ADR-013: Custom Code Playground as Primary Experience with CodeMirror and AST Pre-Validation
-* **Date:** 2026-10-30
-* **Decision:** Transform Code X-Ray into a Custom Code Playground first, with preloaded problems shifted into a secondary "Explore Examples" section. Integrate CodeMirror with dark industrial theme token alignment for Python syntax highlighting, automatic indentation, bracket matching, and line numbering. Provide AST-driven syntax validation via `/api/validate` returning line and column offsets before execution, with error line highlighting in the editor.
-* **Context:** Users need an interactive Python visualizer playground where they can immediately write, paste, and debug custom algorithmic code rather than solely stepping through static presets.
-* **Consequences:** Default landing experience is an editable Python playground with an introductory palindrome example and primary "Visualize Code" CTA; all 25 presets remain accessible via Explore Examples; syntax errors are caught pre-execution with line/column feedback; execution safety is preserved through input limits, AST validation, and fail-closed sandbox routing. Zero regressions across the full 50-test regression suite.
+## ADR-013: Custom code and presets
+- **Decision:** Support an editable custom-code playground alongside 25 allowlisted example presets.
+- **Reason:** Users need to inspect their own Python code as well as study canonical examples.
+- **Trade-off:** Custom-code execution routing must be configured deliberately; AST validation is not a sandbox.
 
-## ADR-014: Unified Animation System with FLIP Pointer Transitions and Speed Adaptation
-* **Date:** 2026-10-30
-* **Decision:** Implement a dedicated, lightweight animation layer (`static/js/animator.js`) decoupled from the tracer and state store. Pointers animate horizontally across memory blocks using the FLIP (First, Last, Invert, Play) technique (`translateX`). Memory block cells feature subtle mutation pulses (`blockMutatePulse`) and smooth enter transitions. Variable table rows fade and slide in smoothly on creation. Active editor line transitions smoothly with hardware-accelerated CSS properties. Speed controls dynamically adapt CSS transition durations (`--anim-duration`), and `prefers-reduced-motion` snaps transitions to instantaneous mode (1ms).
-* **Context:** Visual state transitions during stepping and playback must feel natural, fluid, and intuitive without altering the underlying trace data, breaking DOM contracts, or introducing performance overhead.
-* **Consequences:** Zero execution data tampering; pointers glide smoothly between memory cells on both forward and backward stepping; mutations highlight subtly and remove naturally; rapid scrubbing cancels pending animations to eliminate state desynchronization; full backward compatibility with all 50 existing tests and 25 algorithm presets.
+## ADR-014: Animation layer
+- **Decision:** Keep sequence/pointer animation in a frontend module separate from the Python execution engine.
+- **Reason:** Visual motion should not alter trace data or execution semantics.
+- **Trade-off:** The animation layer must support rapid scrubbing, cancellation, and reduced-motion preferences.
+
+## Current implementation clarifications
+
+These notes are checked against the current `app.py`, `sandbox_adapter.py`, `vercel.json`, frontend markup, and tests:
+
+1. **Trace route defaults:** `XRAY_EXECUTION_MODE` defaults to `local`; `XRAY_ALLOW_LOCAL_EXEC` defaults to `true`.
+2. **Preset routing:** Allowlisted presets use the local `ExecutionTracer`.
+3. **Custom-code routing:** Custom code uses the local tracer if local execution is allowed, the mode is `local`, or the app is running tests. Otherwise it is sent through `Judge0SandboxAdapter`.
+4. **Sandbox configuration:** Setting `XRAY_EXECUTION_MODE=production` alone does not force Judge0 while `XRAY_ALLOW_LOCAL_EXEC=true`. Set `XRAY_ALLOW_LOCAL_EXEC=false`, choose a non-local mode, and configure `JUDGE0_API_URL` plus the provider key if required.
+5. **Health endpoint mismatch:** The health endpoint reports `XRAY_EXECUTION_MODE` with fallback `playground`, while the trace route falls back to `local`.
+6. **Remote flow:** The adapter submits a packaged runner to Judge0. The remote runner returns trace data in provider output; it does not call back into Flask's local tracer.
+7. **Complexity:** Big-O output is a static estimate. Runtime operation counters are measurements from one execution. Neither is a formal proof of algorithmic complexity.
+8. **Semantic states:** The eight primary cell states are `neutral`, `active`, `visited`, `modified`, `discovered`, `found`, `finalized`, and `rejected`. A tracer lifecycle event such as `completed` is not an additional persistent cell state.
+9. **Current interface:** The standard header and transport bar are each 46px; panel headings use sentence case; legal links are in the footer; secondary utilities are grouped in More.
+10. **No unsupported stages:** AST recognition or preset subject matter does not establish a dedicated tree, graph, linked-list, or DP visualizer.
