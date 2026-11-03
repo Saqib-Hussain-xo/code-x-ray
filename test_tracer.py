@@ -215,7 +215,8 @@ def runaway():
     runaway()
 runaway()
 """
-        result = self.tracer.run_trace(code)
+        tracer = ExecutionTracer(max_steps=1000, max_seconds=5.0)
+        result = tracer.run_trace(code)
         self.assertEqual(result["status"], "exception")
         self.assertIsNotNone(result["error"])
         self.assertEqual(result["error"]["type"], "RecursionError")
@@ -259,6 +260,158 @@ arr[2] = 99
         self.assertEqual(mutations[0]["index"], 2)
         self.assertEqual(mutations[0]["from_value"], 4)
         self.assertEqual(mutations[0]["to_value"], 99)
+
+    def test_2d_matrix_detection_and_events(self):
+        """
+        Verifies 2D matrix detection and matrix_access event emissions.
+        """
+        code = """
+grid = [
+    [10, 20],
+    [30, 40]
+]
+x = grid[0][1]
+"""
+        result = self.tracer.run_trace(code)
+        self.assertEqual(result["status"], "completed")
+        self.assertIn("recognition", result)
+
+        final_step = result["steps"][-1]
+        seqs = final_step.get("sequences", {})
+        self.assertIn("grid", seqs)
+        self.assertTrue(seqs["grid"]["is_2d_matrix"])
+        self.assertEqual(seqs["grid"]["rows"], 2)
+        self.assertEqual(seqs["grid"]["cols"], 2)
+        self.assertEqual(seqs["grid"]["matrix_elements"], [[10, 20], [30, 40]])
+
+        all_events = []
+        for step in result["steps"]:
+            all_events.extend(step.get("events", []))
+
+        matrix_events = [e for e in all_events if e.get("type") == "matrix_access"]
+        self.assertTrue(len(matrix_events) > 0, "Should emit matrix_access event")
+        self.assertEqual(matrix_events[0]["target"], "grid")
+        self.assertEqual(matrix_events[0]["row"], 0)
+        self.assertEqual(matrix_events[0]["col"], 1)
+
+    def test_standardized_events_and_searching(self):
+        """
+        Verifies normalized events for search intervals and target findings.
+        """
+        code = """
+arr = [10, 20, 30, 40]
+target = 30
+low = 0
+high = 3
+mid = 2
+if arr[mid] == target:
+    found = True
+"""
+        result = self.tracer.run_trace(code)
+        self.assertEqual(result["status"], "completed")
+
+        all_events = []
+        for step in result["steps"]:
+            all_events.extend(step.get("events", []))
+
+        search_ranges = [e for e in all_events if e.get("type") == "search_range"]
+        self.assertTrue(len(search_ranges) > 0, "Should emit search_range event")
+        self.assertEqual(search_ranges[0]["target"], "arr")
+        self.assertEqual(search_ranges[0]["low"], 0)
+        self.assertEqual(search_ranges[0]["high"], 3)
+
+    def test_stdin_input_and_explanations(self):
+        """
+        Verifies input() handling with stdin_data and step explanations.
+        """
+        code = """
+name = input()
+greeting = f"Hello, {name}"
+"""
+        result = self.tracer.run_trace(code, stdin_data="Alice\n")
+        self.assertEqual(result["status"], "completed")
+        self.assertTrue(result["has_input"])
+        self.assertEqual(result["steps"][-1]["locals_snapshot"]["name"], "Alice")
+        self.assertEqual(result["steps"][-1]["locals_snapshot"]["greeting"], "Hello, Alice")
+
+        # Verify step explanation presence
+        for step in result["steps"]:
+            self.assertIn("explanation", step)
+            self.assertIsInstance(step["explanation"], str)
+            self.assertTrue(len(step["explanation"]) > 0)
+
+    def test_call_stack_and_recursion_tracking(self):
+        """
+        Verifies call stack tracking and recursion info on recursive calls.
+        """
+        code = """
+def fact(n):
+    if n <= 1:
+        return 1
+    return n * fact(n - 1)
+
+res = fact(3)
+"""
+        result = self.tracer.run_trace(code)
+        self.assertEqual(result["status"], "completed")
+
+        # Find steps inside fact()
+        steps_in_fact = [s for s in result["steps"] if any(f["func_name"] == "fact" for f in s.get("call_stack", []))]
+        self.assertTrue(len(steps_in_fact) > 0, "Should record frames for fact()")
+
+        # Verify max recursion depth reached >= 3
+        max_depth = max(s["recursion_info"]["depth"] for s in result["steps"])
+        self.assertGreaterEqual(max_depth, 3)
+
+        # Verify is_recursive flag was set during recursive descent
+        recursive_steps = [s for s in result["steps"] if s["recursion_info"]["is_recursive"]]
+        self.assertTrue(len(recursive_steps) > 0)
+
+    def test_error_diagnosis_attachment(self):
+        """
+        Verifies diagnosis payload is attached to runtime errors.
+        """
+        code = """
+items = [1, 2]
+bad = items[99]
+"""
+        result = self.tracer.run_trace(code)
+        self.assertEqual(result["status"], "exception")
+        self.assertIn("diagnosis", result["error"])
+        diag = result["error"]["diagnosis"]
+        self.assertIn("Index Out of Bounds", diag["title"])
+        self.assertIn("0-based indexing", diag["suggestion"])
+
+    def test_runtime_operation_counters(self):
+        """
+        Verifies runtime operation counters (comparisons, swaps, loop iterations, assignments).
+        """
+        code = """
+nums = [4, 2, 1]
+n = len(nums)
+for i in range(n):
+    for j in range(n - 1):
+        if nums[j] > nums[j + 1]:
+            nums[j], nums[j + 1] = nums[j + 1], nums[j]
+"""
+        result = self.tracer.run_trace(code)
+        self.assertEqual(result["status"], "completed")
+        self.assertIn("operation_metrics", result)
+        metrics = result["operation_metrics"]
+
+        # Loop iterations, comparisons, swaps, assignments should be detected and > 0
+        self.assertGreater(metrics["loop_iterations"], 0)
+        self.assertGreater(metrics["comparisons"], 0)
+        self.assertGreater(metrics["swaps"], 0)
+        self.assertGreater(metrics["assignments"], 0)
+        self.assertGreater(metrics["total"], 0)
+
+        # Step-level cumulative counters should be monotonically increasing
+        final_step = result["steps"][-1]
+        self.assertIn("cumulative_operations", final_step)
+        step_cum = final_step["cumulative_operations"]
+        self.assertEqual(step_cum["swaps"], metrics["swaps"])
+        self.assertEqual(step_cum["comparisons"], metrics["comparisons"])
 
 
 if __name__ == "__main__":

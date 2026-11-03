@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>X-Ray // Runtime Inspector</title>
+    <title>Code X-Ray</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}?v=1.1.0">
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/codemirror/codemirror.min.css') }}?v=1.1.0">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=1.1.0">
@@ -20,31 +20,86 @@
                     <line x1="25" y1="7" x2="7" y2="25" stroke="#58a6ff" stroke-width="2.5" stroke-linecap="square" />
                     <rect x="13.5" y="13.5" width="5" height="5" fill="#0b0e14" stroke="#e6edf3" stroke-width="1.5" />
                 </svg>
-                <span class="brand-title">X-Ray // Runtime Inspector</span>
+                <span class="brand-title">Code X-Ray</span>
             </div>
             <nav class="header-nav">
-                <button type="button" id="tab-custom-code" class="nav-tab active" title="Focus Custom Code Workspace">Custom Code</button>
-                <button type="button" id="tab-explore-examples" class="nav-tab" title="Explore Algorithm Examples">Explore Examples</button>
-                <button type="button" id="btn-shortcuts-help" class="header-help-btn" title="Keyboard Shortcuts (?)" aria-label="Open Keyboard Shortcuts Reference">?</button>
-                <span class="runtime-badge">PYTHON 3</span>
-                <a href="/privacy" class="header-link">Privacy Policy</a>
-                <a href="/terms" class="header-link">Terms and Conditions</a>
+                <div class="nav-primary-group">
+                    <button type="button" id="tab-custom-code" class="nav-tab active" title="Focus Custom Code Workspace">Custom Code</button>
+                    <button type="button" id="tab-explore-examples" class="nav-tab" title="Explore Algorithm Examples">Explore Examples</button>
+                </div>
+                <div class="nav-actions-group">
+                    <button type="button" id="btn-mode-toggle" class="header-action-btn" title="Toggle Learning / Debugging Interface Mode">Mode: Debug</button>
+                    <button type="button" id="btn-compare-modal" class="header-action-btn" title="Compare Algorithms / Code (Side-by-Side)">Compare</button>
+                    
+                    <!-- More Dropdown Menu -->
+                    <div class="more-menu-container">
+                        <button type="button" id="btn-more-menu" class="header-action-btn more-menu-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="more-menu-dropdown" title="More Tools and Options">
+                            <span>More</span>
+                            <svg class="menu-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </button>
+                        <div id="more-menu-dropdown" class="more-menu-dropdown" role="menu" aria-label="More tools and settings" hidden>
+                            <div class="menu-section">
+                                <div class="menu-section-title">Testing &amp; Learning</div>
+                                <button type="button" id="btn-test-cases" class="menu-item" role="menuitem" title="Run Custom Test Cases Batch">
+                                    <span class="menu-item-text">Custom Test Cases</span>
+                                </button>
+                                <button type="button" id="btn-glossary" class="menu-item" role="menuitem" title="Open DSA Concept Glossary">
+                                    <span class="menu-item-text">Concept Glossary</span>
+                                </button>
+                            </div>
+                            <div class="menu-section-divider"></div>
+                            <div class="menu-section">
+                                <div class="menu-section-title">File &amp; Sharing</div>
+                                <button type="button" id="btn-export-trace" class="menu-item" role="menuitem" title="Export Execution Trace as Portable JSON">
+                                    <span class="menu-item-text">Export Trace JSON</span>
+                                </button>
+                                <button type="button" id="btn-import-trace" class="menu-item" role="menuitem" title="Import Execution Trace JSON">
+                                    <span class="menu-item-text">Import Trace JSON</span>
+                                </button>
+                                <input type="file" id="input-import-file" accept=".json" style="display: none;">
+                                <button type="button" id="btn-share-link" class="menu-item" role="menuitem" title="Copy Shareable Code URL to Clipboard">
+                                    <span class="menu-item-text">Share Code Link</span>
+                                </button>
+                            </div>
+                            <div class="menu-section-divider"></div>
+                            <div class="menu-section">
+                                <div class="menu-section-title">Workspace Density</div>
+                                <button type="button" id="btn-density-toggle" class="menu-item menu-item-toggle" role="menuitem" aria-checked="false" title="Toggle Compact / Comfortable Density">
+                                    <span class="menu-item-text">Density</span>
+                                    <span id="density-badge" class="menu-badge">Comfortable</span>
+                                </button>
+                            </div>
+                            <div class="menu-section-divider"></div>
+                            <div class="menu-section">
+                                <div class="menu-section-title">Help &amp; Reference</div>
+                                <button type="button" id="btn-shortcuts-help" class="menu-item" role="menuitem" title="Keyboard Shortcuts (?)" aria-label="Open Keyboard Shortcuts Reference">
+                                    <span class="menu-item-text">Keyboard Shortcuts</span>
+                                    <span class="menu-item-shortcut">?</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <span class="runtime-badge">PYTHON 3</span>
+                </div>
             </nav>
         </header>
 
         <!-- 2. Two-Column Workspace Grid -->
         <main class="workspace-grid">
-            <!-- Left Column: Source Script (Top) and Console Output (Bottom) -->
+            <!-- Left Column: Python Editor (Top) and Console (Bottom) -->
             <div class="workspace-column left-column">
-                <!-- Panel 1: Source Script Editor / Custom Code Playground -->
-                <section class="panel panel-editor" aria-label="Source Script Editor">
+                <!-- Panel 1: Python Editor -->
+                <section class="panel panel-editor" aria-label="Python Editor">
                     <div class="panel-header">
                         <div class="panel-header-left">
-                            <span class="panel-title">Source Script // Python</span>
-                            <span class="panel-badge panel-badge-custom">CUSTOM CODE PLAYGROUND</span>
+                            <span class="panel-title">Python Editor</span>
+                            <span class="panel-badge panel-badge-custom">Custom Code</span>
                         </div>
-                        <div class="panel-header-right">
-                            <span id="syntax-status-badge" class="syntax-badge syntax-badge-idle">SYNTAX // READY</span>
+                        <div class="panel-header-right editor-status-strip">
+                            <span id="recognition-badge" class="syntax-badge syntax-badge-rec" style="display: none;" title="Detected Algorithm and Confidence">Algorithm</span>
+                            <span id="complexity-badge" class="syntax-badge syntax-badge-complexity" style="display: none;" title="Estimated Big-O Complexity">O(1)</span>
+                            <span id="syntax-status-badge" class="syntax-badge syntax-badge-idle" title="Python Syntax Validity">Syntax Ready</span>
                         </div>
                     </div>
                     <div class="panel-body">
@@ -103,7 +158,7 @@
                                 </select>
                             </div>
 
-                            <span id="trace-status" class="status-badge" role="status">IDLE // AWAITING INPUT</span>
+                            <span id="trace-status" class="status-badge" role="status">Ready · Awaiting input</span>
                         </div>
 
                         <!-- Inline Validation Feedback Bar -->
@@ -125,11 +180,41 @@
                 </section>
 
                 <!-- Panel 2: Console Output Panel (Directly Beneath Editor in Left Column) -->
-                <section class="panel panel-console" aria-label="Standard Output Console">
+                <section class="panel panel-console" aria-label="Console">
                     <div class="panel-header">
-                        <span class="panel-title">Console Output // Stdout</span>
+                        <div class="panel-header-left">
+                            <span class="panel-title">Console</span>
+                        </div>
+                        <div class="panel-header-right">
+                            <div id="stdin-toggle-wrapper" class="stdin-toggle-wrapper">
+                                <button type="button" id="btn-toggle-stdin" class="btn btn-secondary btn-stdin-toggle" title="Toggle Standard Input Panel">
+                                    Stdin Input
+                                </button>
+                            </div>
+                            <button type="button" class="panel-collapse-btn" data-panel="panel-console" title="Collapse / Expand Console" aria-label="Toggle Console collapse" aria-expanded="true">
+                                <svg class="collapse-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </button>
+                        </div>
                     </div>
                     <div class="panel-body">
+                        <div id="stdin-container" class="stdin-container" style="display: none;">
+                            <div class="stdin-header-row">
+                                <span class="stdin-label">Standard Input</span>
+                                <span class="stdin-desc">Lines feed sequential input() prompts</span>
+                            </div>
+                            <textarea id="stdin-input" class="stdin-textarea" spellcheck="false" placeholder="Enter input data here (each line matches one input() call)..."></textarea>
+                        </div>
+                        <div id="error-detective-card" class="error-detective-card" style="display: none;" role="alert">
+                            <div class="error-detective-header">
+                                <span class="error-detective-icon">!</span>
+                                <span id="error-detective-title" class="error-detective-title">Error Diagnostic</span>
+                            </div>
+                            <div id="error-detective-explanation" class="error-detective-explanation"></div>
+                            <div class="error-detective-suggestion-box">
+                                <span class="suggestion-label">Pedagogical Suggestion:</span>
+                                <span id="error-detective-suggestion" class="error-detective-suggestion"></span>
+                            </div>
+                        </div>
                         <div class="console-wrapper">
                             <pre class="console-pre"><code id="console-output" class="console-empty">No standard output recorded. Run a trace to view print() outputs.</code></pre>
                         </div>
@@ -137,28 +222,52 @@
                 </section>
             </div>
 
-            <!-- Right Column: Memory Map (Top) and Sequence & Pointer Stage (Bottom) -->
+            <!-- Right Column: Variables, Memory Visualization, and Step Explanation -->
             <div class="workspace-column right-column">
-                <!-- Panel 3: Memory Map Panel -->
-                <section class="panel panel-memory" aria-label="Memory Map and State Diff">
+                <!-- Panel 3: Variables Panel -->
+                <section class="panel panel-memory" aria-label="Variables">
                     <div class="panel-header">
-                        <span class="panel-title">Memory Map // Local Scope</span>
+                        <div class="panel-header-left">
+                            <span class="panel-title">Variables</span>
+                            <div class="panel-header-badges">
+                                <button type="button" id="recursion-badge" class="syntax-badge syntax-badge-rec btn-badge-interactive" style="display: none;" title="Click to view Call Stack">Recursion · Depth 1</button>
+                                <span id="watchpoint-badge" class="syntax-badge syntax-badge-idle" style="display: none;">Watchpoints: 0</span>
+                            </div>
+                        </div>
+                        <div class="panel-header-right">
+                            <button type="button" class="panel-collapse-btn" data-panel="panel-memory" title="Collapse / Expand Variables" aria-label="Toggle Variables collapse" aria-expanded="true">
+                                <svg class="collapse-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </button>
+                        </div>
                     </div>
                     <div class="panel-body">
+                        <!-- Collapsible Call Stack Subsection -->
+                        <details id="call-stack-container" class="call-stack-container" style="display: none;">
+                            <summary class="call-stack-summary">
+                                <div class="call-stack-summary-left">
+                                    <span class="call-stack-title">Call Stack</span>
+                                    <span id="call-stack-depth-label" class="call-stack-depth">Depth: 1</span>
+                                </div>
+                                <span class="call-stack-toggle-icon">▾</span>
+                            </summary>
+                            <div id="call-stack-frames" class="call-stack-frames">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </details>
+
                         <div class="table-scroll-container">
                             <table id="memory-table" class="memory-table">
                                 <thead>
                                     <tr>
-                                        <th scope="col">VARIABLE</th>
-                                        <th scope="col">TYPE</th>
-                                        <th scope="col">CURRENT VALUE</th>
-                                        <th scope="col">PREVIOUS VALUE</th>
-                                        <th scope="col">STATUS</th>
+                                        <th scope="col">Variable</th>
+                                        <th scope="col">Current Value</th>
+                                        <th scope="col">Change</th>
+                                        <th scope="col">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="memory-table-body">
                                     <tr>
-                                        <td colspan="5" class="table-empty-message">
+                                        <td colspan="4" class="table-empty-message">
                                             No active execution frame. Execute a trace to inspect variable snapshots and mutations.
                                         </td>
                                     </tr>
@@ -168,12 +277,29 @@
                     </div>
                 </section>
 
-                <!-- Panel 4: Sequence & Pointer Stage (Expanded Vertical Space) -->
-                <section class="panel panel-sequence" aria-label="Sequence and Pointer Stage">
+                <!-- Panel 4: Memory Visualization (Expanded Vertical Space) -->
+                <section class="panel panel-sequence" aria-label="Memory Visualization">
                     <div class="panel-header">
-                        <span class="panel-title">Sequence &amp; Pointer Stage // Memory Blocks</span>
+                        <div class="panel-header-left">
+                            <span class="panel-title">Memory Visualization</span>
+                        </div>
+                        <div class="panel-header-right">
+                            <div class="semantic-legend" aria-label="Visual state legend">
+                                <span class="legend-item"><span class="legend-dot dot-active"></span>Active</span>
+                                <span class="legend-item"><span class="legend-dot dot-modified"></span>Modified</span>
+                                <span class="legend-item"><span class="legend-dot dot-finalized"></span>Finalized</span>
+                                <span class="legend-item"><span class="legend-dot dot-visited"></span>Visited</span>
+                            </div>
+                            <button type="button" class="panel-collapse-btn" data-panel="panel-sequence" title="Collapse / Expand Memory Visualization" aria-label="Toggle Memory Visualization collapse" aria-expanded="true">
+                                <svg class="collapse-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </button>
+                        </div>
                     </div>
                     <div class="panel-body">
+                        <div id="sequence-pointer-summary" class="sequence-pointer-summary" style="display: none;">
+                            <span class="pointer-summary-label">Active Pointers:</span>
+                            <span id="pointer-summary-content" class="pointer-summary-content"></span>
+                        </div>
                         <div class="stage-scroll-container">
                             <div id="stage-empty" class="stage-empty">
                                 No active sequence detected in current scope. Initialize a list, tuple, or string with index pointers (e.g., left, right, i, j) to inspect contiguous memory cells.
@@ -181,7 +307,50 @@
                             <div id="sequences-container" class="sequences-wrapper">
                                 <!-- Populated dynamically during execution trace -->
                             </div>
+                            <div id="matrix-container" class="matrix-stage-wrapper" style="display: none;">
+                                <!-- Populated dynamically for 2D matrix algorithms -->
+                            </div>
                             <div id="sequence-animation-overlay" class="sequence-animation-overlay" aria-hidden="true"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Panel 5: Step Explanation -->
+                <section id="panel-explanation" class="panel panel-explanation" aria-label="Step Explanation">
+                    <div class="panel-header">
+                        <div class="panel-header-left">
+                            <span class="panel-title">Step Explanation</span>
+                            <span id="explanation-step-badge" class="panel-badge panel-badge-step">Step 0 / 0</span>
+                        </div>
+                        <div class="panel-header-right">
+                            <button type="button" class="panel-collapse-btn" data-panel="panel-explanation" title="Collapse / Expand Step Explanation" aria-label="Toggle Step Explanation collapse" aria-expanded="true">
+                                <svg class="collapse-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="panel-body explanation-panel-body">
+                        <div id="step-explanation-bar" class="step-explanation-card">
+                            <div class="explanation-main-row">
+                                <span class="explanation-icon" aria-hidden="true">&gt;</span>
+                                <p id="step-explanation-text" class="explanation-text">Run a trace or select an example to view step explanations.</p>
+                            </div>
+                            <div id="explanation-var-diff" class="explanation-var-diff" style="display: none;">
+                                <span class="diff-badge">Mutation</span>
+                                <span id="explanation-var-diff-text" class="diff-text"></span>
+                            </div>
+                            <details id="explanation-details" class="explanation-details">
+                                <summary class="explanation-details-summary">
+                                    <span class="details-summary-title">Execution Metrics</span>
+                                    <span class="details-summary-toggle">▾</span>
+                                </summary>
+                                <div id="operation-counters-bar" class="operation-counters-bar">
+                                    <span class="op-metric" id="op-compares" title="Runtime element comparisons"><span class="op-label">CMP:</span> <span class="op-val">0</span></span>
+                                    <span class="op-metric" id="op-swaps" title="Runtime element swaps"><span class="op-label">SWP:</span> <span class="op-val">0</span></span>
+                                    <span class="op-metric" id="op-assignments" title="Runtime variable assignments/mutations"><span class="op-label">MUT:</span> <span class="op-val">0</span></span>
+                                    <span class="op-metric" id="op-loops" title="Loop iterations executed"><span class="op-label">LOOP:</span> <span class="op-val">0</span></span>
+                                    <span class="op-metric" id="op-total" title="Total recorded operations"><span class="op-label">OPS:</span> <span class="op-val">0</span></span>
+                                </div>
+                            </details>
                         </div>
                     </div>
                 </section>
@@ -218,6 +387,17 @@
                         <line x1="19" y1="5" x2="19" y2="19" />
                     </svg>
                 </button>
+                <button type="button" id="btn-continue" class="btn-transport btn-continue" title="Resume to Next Breakpoint (F5 / C)" disabled aria-label="Continue to Breakpoint">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                        <polygon points="5 4 15 12 5 20 5 4" />
+                        <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2" />
+                    </svg>
+                </button>
+                <button type="button" id="btn-bookmark" class="btn-transport btn-bookmark" title="Bookmark Current Step (B)" disabled aria-label="Bookmark Step">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </button>
             </div>
 
             <div class="transport-scrubber-group">
@@ -226,6 +406,10 @@
             </div>
 
             <div class="transport-speed-group">
+                <button type="button" id="btn-predict-toggle" class="btn-predict-toggle" title="Toggle Interactive Prediction Mode">
+                    PREDICT: OFF
+                </button>
+                <span id="predict-score-badge" class="predict-score-badge" style="display: none;">0/0</span>
                 <label for="speed-select" class="speed-label">SPEED:</label>
                 <select id="speed-select" class="speed-select" aria-label="Playback Speed">
                     <option value="0.5">0.5x</option>
@@ -235,11 +419,22 @@
                 </select>
             </div>
         </footer>
+
+        <!-- 4. Sub-footer (Privacy & Terms Legal Links) -->
+        <footer class="app-sub-footer">
+            <div class="footer-inner">
+                <span class="footer-brand">Code X-Ray</span>
+                <span class="footer-separator">•</span>
+                <a href="/privacy" class="footer-link">Privacy Policy</a>
+                <span class="footer-separator">•</span>
+                <a href="/terms" class="footer-link">Terms and Conditions</a>
+            </div>
+        </footer>
     </div>
     <div id="confirm-modal" class="modal-backdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
         <div class="modal-card">
             <div class="modal-header">
-                <span id="confirm-modal-title" class="modal-title">CONFIRM DISCARD // UNSAVED CUSTOM CODE</span>
+                <span id="confirm-modal-title" class="modal-title">Discard Unsaved Changes?</span>
                 <button type="button" id="confirm-modal-close" class="modal-close" aria-label="Close dialog">&times;</button>
             </div>
             <div class="modal-body">
@@ -254,34 +449,42 @@
     <div id="shortcuts-modal" class="modal-backdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-title">
         <div class="modal-card modal-card-shortcuts">
             <div class="modal-header">
-                <span id="shortcuts-modal-title" class="modal-title">KEYBOARD SHORTCUTS REFERENCE</span>
+                <span id="shortcuts-modal-title" class="modal-title">Keyboard Shortcuts</span>
                 <button type="button" id="shortcuts-modal-close" class="modal-close" aria-label="Close shortcuts dialog">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="shortcuts-group">
-                    <div class="shortcuts-group-title">EDITOR</div>
+                    <div class="shortcuts-group-title">Editor</div>
                     <div class="shortcut-item">
                         <span class="shortcut-action">Visualize Code</span>
                         <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>Enter</kbd></span>
                     </div>
                 </div>
                 <div class="shortcuts-group">
-                    <div class="shortcuts-group-title">PLAYBACK</div>
+                    <div class="shortcuts-group-title">Playback</div>
                     <div class="shortcut-item">
                         <span class="shortcut-action">Play / Pause</span>
                         <span class="shortcut-keys"><kbd>Space</kbd></span>
                     </div>
                     <div class="shortcut-item">
                         <span class="shortcut-action">Step Forward</span>
-                        <span class="shortcut-keys"><kbd>→</kbd></span>
+                        <span class="shortcut-keys"><kbd>&rarr;</kbd></span>
                     </div>
                     <div class="shortcut-item">
                         <span class="shortcut-action">Step Backward</span>
-                        <span class="shortcut-keys"><kbd>←</kbd></span>
+                        <span class="shortcut-keys"><kbd>&larr;</kbd></span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-action">Continue to Breakpoint</span>
+                        <span class="shortcut-keys"><kbd>C</kbd> / <kbd>F5</kbd></span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-action">Toggle Bookmark</span>
+                        <span class="shortcut-keys"><kbd>B</kbd></span>
                     </div>
                 </div>
                 <div class="shortcuts-group">
-                    <div class="shortcuts-group-title">NAVIGATION</div>
+                    <div class="shortcuts-group-title">Navigation</div>
                     <div class="shortcut-item">
                         <span class="shortcut-action">First Step</span>
                         <span class="shortcut-keys"><kbd>Home</kbd></span>
@@ -305,11 +508,235 @@
             </div>
         </div>
     </div>
+
+    <!-- Variable History Drawer Modal -->
+    <div id="variable-history-modal" class="modal-backdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="var-history-title">
+        <div class="modal-card modal-card-history">
+            <div class="modal-header">
+                <span id="var-history-title" class="modal-title">Variable History</span>
+                <button type="button" id="var-history-close" class="modal-close" aria-label="Close dialog">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="var-history-meta">
+                    <span id="var-history-name" class="var-history-name">var_name</span>
+                    <span id="var-history-mutations-count" class="var-history-count">0 mutations</span>
+                </div>
+                <div class="table-scroll-container">
+                    <table class="memory-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">STEP</th>
+                                <th scope="col">LINE</th>
+                                <th scope="col">VALUE</th>
+                                <th scope="col">CHANGE</th>
+                            </tr>
+                        </thead>
+                        <tbody id="var-history-table-body">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="var-history-dismiss" class="btn btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Predict Before Execute Modal -->
+    <div id="predict-modal" class="modal-backdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="predict-modal-title">
+        <div class="modal-card modal-card-predict">
+            <div class="modal-header">
+                <span id="predict-modal-title" class="modal-title">Predict Next State</span>
+                <button type="button" id="predict-modal-close" class="modal-close" aria-label="Close dialog">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="predict-modal-prompt" class="predict-prompt">Predict the value of the active variable or next action before executing step:</p>
+                <div class="predict-input-group">
+                    <label for="predict-input-value" id="predict-target-label" class="predict-label">Predicted Value:</label>
+                    <input type="text" id="predict-input-value" class="predict-input" placeholder="e.g. 5, True, [1, 2]" autocomplete="off">
+                </div>
+                <div id="predict-feedback" class="predict-feedback" style="display: none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="predict-modal-skip" class="btn btn-secondary">Skip Prediction</button>
+                <button type="button" id="predict-modal-submit" class="btn btn-primary">Check &amp; Step</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Algorithm & Code Comparison Modal -->
+    <div id="comparison-modal" class="modal-backdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="comparison-modal-title">
+        <div class="modal-card modal-card-comparison">
+            <div class="modal-header">
+                <span id="comparison-modal-title" class="modal-title">Algorithm &amp; Code Comparison</span>
+                <button type="button" id="comparison-modal-close" class="modal-close" aria-label="Close dialog">&times;</button>
+            </div>
+            <div class="modal-body comparison-body">
+                <div class="comparison-inputs-grid">
+                    <div class="comparison-col">
+                        <label for="compare-select-a" class="comparison-label">Algorithm A</label>
+                        <select id="compare-select-a" class="comparison-select">
+                            <option value="bubble_sort">Bubble Sort</option>
+                            <option value="selection_sort">Selection Sort</option>
+                            <option value="insertion_sort">Insertion Sort</option>
+                            <option value="binary_search">Binary Search</option>
+                            <option value="linear_search">Linear Search</option>
+                            <option value="custom">Custom Code A</option>
+                        </select>
+                        <textarea id="compare-code-a" class="comparison-code-textarea" rows="6" placeholder="Enter Python code for Algorithm A..."></textarea>
+                    </div>
+                    <div class="comparison-col">
+                        <label for="compare-select-b" class="comparison-label">Algorithm B</label>
+                        <select id="compare-select-b" class="comparison-select">
+                            <option value="selection_sort">Selection Sort</option>
+                            <option value="bubble_sort">Bubble Sort</option>
+                            <option value="insertion_sort">Insertion Sort</option>
+                            <option value="binary_search">Binary Search</option>
+                            <option value="linear_search">Linear Search</option>
+                            <option value="custom">Custom Code B</option>
+                        </select>
+                        <textarea id="compare-code-b" class="comparison-code-textarea" rows="6" placeholder="Enter Python code for Algorithm B..."></textarea>
+                    </div>
+                </div>
+                <div class="comparison-shared-input">
+                    <label for="compare-shared-stdin" class="comparison-label">Shared Input / Stdin (Optional)</label>
+                    <input type="text" id="compare-shared-stdin" class="comparison-input" placeholder="e.g. input data for both algorithms">
+                </div>
+                <div class="comparison-actions">
+                    <button type="button" id="btn-run-comparison" class="btn btn-primary">Run Comparison</button>
+                </div>
+                <div id="comparison-results" class="comparison-results" style="display: none;">
+                    <div id="comparison-verdict-box" class="comparison-verdict-box">
+                        <span class="comparison-verdict-title">Verdict &amp; Analysis</span>
+                        <p id="comparison-verdict-text" class="comparison-verdict-text"></p>
+                    </div>
+                    <div class="comparison-table-wrapper">
+                        <table class="comparison-table">
+                            <thead>
+                                <tr>
+                                    <th>Metric</th>
+                                    <th id="comp-th-a">Algorithm A</th>
+                                    <th id="comp-th-b">Algorithm B</th>
+                                    <th>Delta (B - A)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="comparison-table-body">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="comparison-disclaimer">
+                        <small id="comparison-disclaimer-text">Static estimate based on AST heuristics. Measured runtime operations reflect this single execution and do not prove asymptotic complexity.</small>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="comparison-modal-dismiss" class="btn btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Test Cases Modal (Feature 21) -->
+    <div id="test-cases-modal" class="modal-backdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="test-cases-modal-title">
+        <div class="modal-card modal-card-tests">
+            <div class="modal-header">
+                <span id="test-cases-modal-title" class="modal-title">Custom Test Cases</span>
+                <button type="button" id="test-cases-modal-close" class="modal-close" aria-label="Close dialog">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-hint">Execute the current Python script across multiple inputs and verify expected outputs.</p>
+                <div id="test-cases-list" class="test-cases-list">
+                    <div class="test-case-row" data-index="0">
+                        <div class="test-case-field">
+                            <label class="test-label">Input (stdin):</label>
+                            <input type="text" class="test-input tc-input" placeholder="e.g. 5" value="5">
+                        </div>
+                        <div class="test-case-field">
+                            <label class="test-label">Expected Output:</label>
+                            <input type="text" class="test-input tc-expected" placeholder="e.g. 25" value="">
+                        </div>
+                    </div>
+                </div>
+                <div class="test-cases-controls">
+                    <button type="button" id="btn-add-test-case" class="btn btn-secondary">+ Add Test Case</button>
+                    <button type="button" id="btn-run-all-tests" class="btn btn-primary">Run Batch Tests</button>
+                </div>
+                <div id="test-batch-results" class="test-batch-results" style="display: none;">
+                    <div id="test-batch-summary" class="test-batch-summary"></div>
+                    <div id="test-batch-details" class="test-batch-details"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="test-cases-modal-dismiss" class="btn btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Concept Glossary Modal (Feature 22) -->
+    <div id="glossary-modal" class="modal-backdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="glossary-modal-title">
+        <div class="modal-card modal-card-glossary">
+            <div class="modal-header">
+                <span id="glossary-modal-title" class="modal-title">Concept Glossary</span>
+                <button type="button" id="glossary-modal-close" class="modal-close" aria-label="Close dialog">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="glossary-search-wrapper">
+                    <input type="search" id="glossary-search-input" class="glossary-search-input" placeholder="Search concepts (e.g. pointer, recursion, swap, Big-O)...">
+                </div>
+                <div id="glossary-list" class="glossary-list">
+                    <article class="glossary-item" data-term="variable memory name">
+                        <h4 class="glossary-term">Variable</h4>
+                        <p class="glossary-def">A named memory location that stores a value. In Python, variables are dynamically typed references bound to objects in local or global scope.</p>
+                    </article>
+                    <article class="glossary-item" data-term="loop iteration for while">
+                        <h4 class="glossary-term">Loop &amp; Iteration</h4>
+                        <p class="glossary-def">A control flow construct (<code>for</code>, <code>while</code>) executing a block of statements repeatedly until a termination condition is reached.</p>
+                    </article>
+                    <article class="glossary-item" data-term="array sequence list index">
+                        <h4 class="glossary-term">Sequence &amp; List</h4>
+                        <p class="glossary-def">An ordered collection of elements accessible via zero-based integer indices. Illustrated in Code X-Ray as distinct memory blocks with active pointer markers.</p>
+                    </article>
+                    <article class="glossary-item" data-term="pointer index marker left right mid">
+                        <h4 class="glossary-term">Pointer / Index Marker</h4>
+                        <p class="glossary-def">An integer variable holding an offset indexing a position in a sequence (e.g. <code>left</code>, <code>right</code>, <code>mid</code>, <code>i</code>, <code>j</code>).</p>
+                    </article>
+                    <article class="glossary-item" data-term="swap projectile motion">
+                        <h4 class="glossary-term">Swap</h4>
+                        <p class="glossary-def">Exchanging the values of two variables or sequence positions (e.g. <code>a[i], a[j] = a[j], a[i]</code>), animated in X-Ray via projectile motion.</p>
+                    </article>
+                    <article class="glossary-item" data-term="comparison condition compare">
+                        <h4 class="glossary-term">Comparison</h4>
+                        <p class="glossary-def">Evaluating relational operators (<code>&lt;</code>, <code>&gt;</code>, <code>==</code>, <code>!=</code>, <code>&lt;=</code>, <code>&gt;=</code>) between two elements or expressions, highlighted in amber during trace steps.</p>
+                    </article>
+                    <article class="glossary-item" data-term="recursion call stack frame">
+                        <h4 class="glossary-term">Recursion &amp; Call Stack</h4>
+                        <p class="glossary-def">A function invoking itself on smaller subproblems until a base condition stops the descent. Each call allocates a stack frame in execution memory.</p>
+                    </article>
+                    <article class="glossary-item" data-term="matrix 2d grid row col">
+                        <h4 class="glossary-term">2D Matrix / Grid</h4>
+                        <p class="glossary-def">A rectangular array of elements arranged in rows and columns accessed via <code>grid[r][c]</code>, visualized in X-Ray's adaptive coordinate stage.</p>
+                    </article>
+                    <article class="glossary-item" data-term="time complexity big-o asymptotic">
+                        <h4 class="glossary-term">Time Complexity (Big-O)</h4>
+                        <p class="glossary-def">The theoretical upper bound rate of step growth as input size n approaches infinity. E.g. O(1) constant, O(log n) logarithmic, O(n) linear, O(n^2) quadratic.</p>
+                    </article>
+                    <article class="glossary-item" data-term="space complexity auxiliary memory">
+                        <h4 class="glossary-term">Auxiliary Space Complexity</h4>
+                        <p class="glossary-def">The amount of additional memory allocated by an algorithm beyond the storage required for the input data itself.</p>
+                    </article>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="glossary-modal-dismiss" class="btn btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
     <script src="{{ url_for('static', filename='vendor/codemirror/codemirror.min.js') }}?v=1.1.0"></script>
     <script src="{{ url_for('static', filename='vendor/codemirror/python.min.js') }}?v=1.1.0"></script>
     <script src="{{ url_for('static', filename='vendor/codemirror/matchbrackets.min.js') }}?v=1.1.0"></script>
     <script src="{{ url_for('static', filename='vendor/codemirror/closebrackets.min.js') }}?v=1.1.0"></script>
     <script src="{{ url_for('static', filename='js/presets.js') }}?v=1.1.0"></script>
+    <script src="{{ url_for('static', filename='js/matrix-stage.js') }}?v=1.2.0"></script>
     <script src="{{ url_for('static', filename='js/animator.js') }}?v=1.1.0"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}?v=1.1.0"></script>
 </body>

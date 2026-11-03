@@ -20,7 +20,7 @@ class TestFrontendIntegration(unittest.TestCase):
         html = res.data.decode("utf-8")
 
         # Required test strings
-        self.assertIn("X-Ray // Runtime Inspector", html)
+        self.assertIn("Code X-Ray", html)
         self.assertIn("Privacy Policy", html)
         self.assertIn("Terms and Conditions", html)
 
@@ -247,7 +247,7 @@ class TestFrontendIntegration(unittest.TestCase):
         # 1. Navigation elements: Custom Code primary, Explore Examples secondary
         self.assertIn('id="tab-custom-code"', html)
         self.assertIn('id="tab-explore-examples"', html)
-        self.assertIn("CUSTOM CODE PLAYGROUND", html)
+        self.assertIn("Custom Code", html)
 
         # 2. Controls: Visualize Code, Reset Example, Clear, and Explore Examples dropdown
         self.assertIn('id="btn-run"', html)
@@ -454,6 +454,229 @@ class TestFrontendIntegration(unittest.TestCase):
         self.assertIn("--font-size-xs", design_md)
         self.assertIn("--border-elevated", design_md)
         self.assertIn("#ff7b72", design_md)  # CodeMirror keyword token
+
+    def test_phase1_visualization_intelligence_frontend(self):
+        """Verify Phase 1 matrix stage, recognition badge, and intelligent sorting/searching states."""
+        # 1. HTML elements
+        res_html = self.client.get("/")
+        self.assertEqual(res_html.status_code, 200)
+        html = res_html.data.decode("utf-8")
+
+        self.assertIn('id="recognition-badge"', html)
+        self.assertIn('id="matrix-container"', html)
+        self.assertIn('matrix-stage.js', html)
+
+        # 2. Matrix stage script
+        res_matrix = self.client.get("/static/js/matrix-stage.js")
+        self.assertEqual(res_matrix.status_code, 200)
+        matrix_js = res_matrix.data.decode("utf-8")
+        self.assertIn("XRayMatrixStage", matrix_js)
+        self.assertIn("matrix_elements", matrix_js)
+        self.assertIn("matrix-cell-active", matrix_js)
+
+        # 3. CSS styles for matrix and search/sort states
+        res_css = self.client.get("/static/css/styles.css")
+        self.assertEqual(res_css.status_code, 200)
+        css = res_css.data.decode("utf-8")
+        self.assertIn(".matrix-grid-wrapper", css)
+        self.assertIn(".matrix-cell", css)
+        self.assertIn(".matrix-cell-active", css)
+        self.assertIn(".cell-sorted", css)
+        self.assertIn(".cell-searching", css)
+        self.assertIn(".cell-rejected", css)
+        self.assertIn(".cell-found", css)
+        self.assertIn("foundUpwardPulse", css)
+
+        # 4. App.js integration logic
+        res_app = self.client.get("/static/js/app.js")
+        self.assertEqual(res_app.status_code, 200)
+        app_js = res_app.data.decode("utf-8")
+        self.assertIn("recognitionBadge", app_js)
+        self.assertIn("matrixContainer", app_js)
+        self.assertIn("XRayMatrixStage.render", app_js)
+        self.assertIn("getCellEventClasses", app_js)
+        self.assertIn("cell-sorted", app_js)
+        self.assertIn("cell-searching", app_js)
+        self.assertIn("cell-found", app_js)
+
+    def test_phase2_execution_intelligence_and_learning_frontend(self):
+        """Verify Phase 2 frontend: step explanations, bookmarks, variable history, watchpoints, stdin, predict mode."""
+        # 1. HTML elements
+        res_html = self.client.get("/")
+        self.assertEqual(res_html.status_code, 200)
+        html = res_html.data.decode("utf-8")
+
+        self.assertIn('id="btn-bookmark"', html)
+        self.assertIn('id="step-explanation-bar"', html)
+        self.assertIn('id="step-explanation-text"', html)
+        self.assertIn('id="stdin-container"', html)
+        self.assertIn('id="stdin-input"', html)
+        self.assertIn('id="btn-toggle-stdin"', html)
+        self.assertIn('id="watchpoint-badge"', html)
+        self.assertIn('id="btn-predict-toggle"', html)
+        self.assertIn('id="predict-score-badge"', html)
+        self.assertIn('id="variable-history-modal"', html)
+        self.assertIn('id="predict-modal"', html)
+
+        # 2. CSS styles for Phase 2 components
+        res_css = self.client.get("/static/css/styles.css")
+        self.assertEqual(res_css.status_code, 200)
+        css = res_css.data.decode("utf-8")
+        self.assertIn(".stdin-container", css)
+        self.assertIn(".step-explanation-bar", css)
+        self.assertIn(".btn-predict-toggle", css)
+        self.assertIn(".btn-watchpoint", css)
+        self.assertIn(".modal-card-history", css)
+        self.assertIn(".modal-card-predict", css)
+
+        # 3. JavaScript logic in app.js
+        res_app = self.client.get("/static/js/app.js")
+        self.assertEqual(res_app.status_code, 200)
+        app_js = res_app.data.decode("utf-8")
+        self.assertIn("toggleBookmark", app_js)
+        self.assertIn("toggleWatchpoint", app_js)
+        self.assertIn("openVariableHistory", app_js)
+        self.assertIn("togglePredictMode", app_js)
+        self.assertIn("openPredictModal", app_js)
+        self.assertIn("stepExplanationText", app_js)
+
+    def test_phase3_advanced_debugging_frontend(self):
+        """Verify Phase 3 frontend: breakpoints, continue button, call stack, recursion badge, error detective."""
+        # 1. HTML elements
+        res_html = self.client.get("/")
+        self.assertEqual(res_html.status_code, 200)
+        html = res_html.data.decode("utf-8")
+
+        self.assertIn('id="btn-continue"', html)
+        self.assertIn('id="call-stack-container"', html)
+        self.assertIn('id="call-stack-frames"', html)
+        self.assertIn('id="call-stack-depth-label"', html)
+        self.assertIn('id="recursion-badge"', html)
+        self.assertIn('id="error-detective-card"', html)
+        self.assertIn('id="error-detective-title"', html)
+        self.assertIn('id="error-detective-explanation"', html)
+        self.assertIn('id="error-detective-suggestion"', html)
+
+        # 2. CSS styles for Phase 3 components
+        res_css = self.client.get("/static/css/styles.css")
+        self.assertEqual(res_css.status_code, 200)
+        css = res_css.data.decode("utf-8")
+
+        self.assertIn(".btn-continue", css)
+        self.assertIn(".call-stack-container", css)
+        self.assertIn(".call-stack-pill", css)
+        self.assertIn(".recursion-badge", css)
+        self.assertIn(".error-detective-card", css)
+        self.assertIn(".error-detective-title", css)
+        self.assertIn(".cm-gutter-breakpoint", css)
+
+        # 3. JavaScript logic in app.js
+        res_app = self.client.get("/static/js/app.js")
+        self.assertEqual(res_app.status_code, 200)
+        app_js = res_app.data.decode("utf-8")
+
+        self.assertIn("toggleBreakpoint", app_js)
+        self.assertIn("continueToBreakpoint", app_js)
+        self.assertIn("renderCallStack", app_js)
+        self.assertIn("showErrorDetective", app_js)
+        self.assertIn("hideErrorDetective", app_js)
+        self.assertIn("gutterClick", app_js)
+
+    def test_phase4_code_intelligence_and_comparison_frontend(self):
+        """Verify Phase 4 frontend: operation counters bar, complexity badge, comparison modal and actions."""
+        # 1. HTML elements
+        res_html = self.client.get("/")
+        self.assertEqual(res_html.status_code, 200)
+        html = res_html.data.decode("utf-8")
+
+        self.assertIn('id="operation-counters-bar"', html)
+        self.assertIn('id="op-compares"', html)
+        self.assertIn('id="op-swaps"', html)
+        self.assertIn('id="op-assignments"', html)
+        self.assertIn('id="op-loops"', html)
+        self.assertIn('id="op-total"', html)
+        self.assertIn('id="complexity-badge"', html)
+        self.assertIn('id="btn-compare-modal"', html)
+        self.assertIn('id="comparison-modal"', html)
+        self.assertIn('id="btn-run-comparison"', html)
+        self.assertIn('id="comparison-table-body"', html)
+        self.assertIn('id="comparison-results"', html)
+
+        # 2. CSS styles
+        res_css = self.client.get("/static/css/styles.css")
+        self.assertEqual(res_css.status_code, 200)
+        css = res_css.data.decode("utf-8")
+
+        self.assertIn(".operation-counters-bar", css)
+        self.assertIn(".op-metric", css)
+        self.assertIn(".syntax-badge-complexity", css)
+        self.assertIn(".modal-card-comparison", css)
+        self.assertIn(".comparison-inputs-grid", css)
+        self.assertIn(".comparison-table", css)
+
+        # 3. JavaScript logic in app.js
+        res_app = self.client.get("/static/js/app.js")
+        self.assertEqual(res_app.status_code, 200)
+        app_js = res_app.data.decode("utf-8")
+
+        self.assertIn("openComparisonModal", app_js)
+        self.assertIn("closeComparisonModal", app_js)
+        self.assertIn("runAlgorithmComparison", app_js)
+        self.assertIn("renderComparisonResults", app_js)
+        self.assertIn("complexityBadge", app_js)
+        self.assertIn("cumulative_operations", app_js)
+
+    def test_phase5_platform_expansion_and_polish_frontend(self):
+        """Verify Phase 5 frontend: mode toggling, trace export/import, sharing, test cases, and glossary."""
+        # 1. HTML elements
+        res_html = self.client.get("/")
+        self.assertEqual(res_html.status_code, 200)
+        html = res_html.data.decode("utf-8")
+
+        self.assertIn('id="btn-mode-toggle"', html)
+        self.assertIn('id="btn-export-trace"', html)
+        self.assertIn('id="btn-import-trace"', html)
+        self.assertIn('id="input-import-file"', html)
+        self.assertIn('id="btn-share-link"', html)
+        self.assertIn('id="btn-test-cases"', html)
+        self.assertIn('id="test-cases-modal"', html)
+        self.assertIn('id="btn-add-test-case"', html)
+        self.assertIn('id="btn-run-all-tests"', html)
+        self.assertIn('id="test-batch-results"', html)
+        self.assertIn('id="btn-glossary"', html)
+        self.assertIn('id="glossary-modal"', html)
+        self.assertIn('id="glossary-search-input"', html)
+        self.assertIn('id="glossary-list"', html)
+
+        # 2. CSS styles
+        res_css = self.client.get("/static/css/styles.css")
+        self.assertEqual(res_css.status_code, 200)
+        css = res_css.data.decode("utf-8")
+
+        self.assertIn("body.mode-learning", css)
+        self.assertIn("body.mode-debugging", css)
+        self.assertIn(".modal-card-tests", css)
+        self.assertIn(".test-case-row", css)
+        self.assertIn(".modal-card-glossary", css)
+        self.assertIn(".glossary-item", css)
+
+        # 3. JavaScript logic in app.js
+        res_app = self.client.get("/static/js/app.js")
+        self.assertEqual(res_app.status_code, 200)
+        app_js = res_app.data.decode("utf-8")
+
+        self.assertIn("toggleUIMode", app_js)
+        self.assertIn("applyUIMode", app_js)
+        self.assertIn("exportTraceJSON", app_js)
+        self.assertIn("handleImportFile", app_js)
+        self.assertIn("copyShareLink", app_js)
+        self.assertIn("checkUrlHashForCode", app_js)
+        self.assertIn("openTestCasesModal", app_js)
+        self.assertIn("closeTestCasesModal", app_js)
+        self.assertIn("runBatchTests", app_js)
+        self.assertIn("openGlossaryModal", app_js)
+        self.assertIn("closeGlossaryModal", app_js)
+        self.assertIn("filterGlossary", app_js)
 
 
 

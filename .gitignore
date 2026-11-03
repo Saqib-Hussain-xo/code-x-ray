@@ -44,8 +44,10 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Local Impeccable state
+# Local Impeccable state & Agent skills
 .impeccable/
+.agent/
+.pytest_cache/
 
 # Local acceptance audit artifacts
 audit_summary.json
