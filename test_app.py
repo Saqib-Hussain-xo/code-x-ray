@@ -233,7 +233,7 @@ class TestAppServer(unittest.TestCase):
         # 1. Main visualizer index route
         index_res = self.client.get("/")
         self.assertEqual(index_res.status_code, 200)
-        self.assertIn(b"X-Ray // Runtime Inspector", index_res.data)
+        self.assertIn(b"Code X-Ray", index_res.data)
 
         # 2. Privacy Policy route
         privacy_res = self.client.get("/privacy")
@@ -280,6 +280,74 @@ class TestAppServer(unittest.TestCase):
             self.assertIn("Rate limit", data.get("error"))
         finally:
             app.config["TESTING"] = True
+
+    def test_compare_endpoint(self):
+        """
+        Verify POST /api/compare executes and returns comparative metrics between two algorithms.
+        """
+        code_bubble = "arr = [4, 2, 1]\nfor i in range(len(arr)):\n    for j in range(len(arr)-1):\n        if arr[j] > arr[j+1]: arr[j], arr[j+1] = arr[j+1], arr[j]\nprint(arr)"
+        code_selection = "arr = [4, 2, 1]\nfor i in range(len(arr)):\n    m = i\n    for j in range(i+1, len(arr)):\n        if arr[j] < arr[m]: m = j\n    arr[i], arr[m] = arr[m], arr[i]\nprint(arr)"
+        payload = {
+            "code_a": code_bubble,
+            "code_b": code_selection,
+            "name_a": "Bubble Sort",
+            "name_b": "Selection Sort"
+        }
+        response = self.client.post(
+            "/api/compare",
+            data=json.dumps(payload),
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertIn("implementation_a", data)
+        self.assertIn("implementation_b", data)
+        self.assertIn("comparison", data)
+        self.assertTrue(data["comparison"]["outputs_match"])
+        self.assertIn("operations_delta", data["comparison"])
+
+    def test_trace_includes_complexity_and_operation_metrics(self):
+        """
+        Verify POST /api/trace includes complexity analysis and operation metrics.
+        """
+        response = self.client.post(
+            "/api/trace",
+            data=json.dumps({"preset_id": "bubble_sort"}),
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertIn("complexity", data)
+        self.assertEqual(data["complexity"]["estimated_time"], "O(n^2)")
+        self.assertIn("operation_metrics", data)
+        self.assertGreater(data["operation_metrics"]["total"], 0)
+
+    def test_batch_test_endpoint(self):
+        """
+        Verify POST /api/batch-test executes custom test cases and reports pass/fail outcomes.
+        """
+        code = "val = int(input())\nprint(val * val)"
+        payload = {
+            "code": code,
+            "test_cases": [
+                {"input": "3", "expected_output": "9"},
+                {"input": "5", "expected_output": "25"},
+                {"input": "4", "expected_output": "99"}  # Intentional fail
+            ]
+        }
+        response = self.client.post(
+            "/api/batch-test",
+            data=json.dumps(payload),
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["total_cases"], 3)
+        self.assertEqual(data["passed_cases"], 2)
+        self.assertEqual(data["failed_cases"], 1)
+        self.assertTrue(data["results"][0]["passed"])
+        self.assertTrue(data["results"][1]["passed"])
+        self.assertFalse(data["results"][2]["passed"])
 
 
 if __name__ == "__main__":

@@ -17,6 +17,9 @@ import time
 from collections import defaultdict
 from flask import Flask, jsonify, render_template, request, send_from_directory
 from tracer import ExecutionTracer
+from recognizer import recognize_algorithm
+from analyzer import analyze_complexity
+from comparison import compare_algorithms
 from presets_data import ALGORITHM_PRESETS, ALLOWED_PRESET_IDS
 from sandbox_adapter import (
     Judge0SandboxAdapter,
@@ -180,8 +183,14 @@ def validate_code():
         }), 400
 
     try:
-        ast.parse(code_str, filename="<user_code>")
-        return jsonify({"valid": True}), 200
+        tree = ast.parse(code_str, filename="<user_code>")
+        rec = recognize_algorithm(code_str)
+        has_input = any(
+            isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "input"
+            for node in ast.walk(tree)
+        )
+        complexity = analyze_complexity(code_str, recognized_algo=rec)
+        return jsonify({"valid": True, "recognition": rec, "has_input": has_input, "complexity": complexity}), 200
     except SyntaxError as syn_err:
         line_no = syn_err.lineno or 1
         col_no = syn_err.offset or 1
@@ -290,6 +299,10 @@ def trace_code():
             "stdout": ""
         }), 400
 
+    stdin_data = payload.get("stdin", "")
+    if not isinstance(stdin_data, str):
+        stdin_data = str(stdin_data)
+
     exec_mode = os.environ.get("XRAY_EXECUTION_MODE", "local").lower()
     allow_local = os.environ.get("XRAY_ALLOW_LOCAL_EXEC", "true").lower() == "true"
     is_testing = app.config.get("TESTING", False)
@@ -298,7 +311,7 @@ def trace_code():
     if is_preset or allow_local or exec_mode == "local" or is_testing:
         tracer = ExecutionTracer(max_steps=1000, max_seconds=2.0)
         try:
-            result = tracer.run_trace(target_code)
+            result = tracer.run_trace(target_code, stdin_data=stdin_data)
         except Exception as unexpected_err:
             return jsonify({
                 "error": "Internal tracer execution failed.",
@@ -338,6 +351,19 @@ def trace_code():
                 "details": str(exec_err)
             }), 503
 
+    # Ensure recognition is attached
+    if "recognition" not in result:
+        result["recognition"] = recognize_algorithm(target_code)
+    if isinstance(result.get("recognition"), dict) and "type" not in result["recognition"]:
+        result["recognition"]["type"] = result["recognition"].get("algorithm")
+
+    if "complexity" not in result:
+        result["complexity"] = analyze_complexity(
+            target_code,
+            trace_metrics=result.get("operation_metrics"),
+            recognized_algo=result.get("recognition")
+        )
+
     # Syntax errors in user code are returned as structured 400 responses
     if result.get("status") == "syntax_error":
         return jsonify(result), 400
@@ -350,6 +376,116 @@ def trace_code():
             "error": "Failed to serialize execution trace payload to JSON.",
             "message": str(serialization_err)
         }), 400
+
+
+@app.route("/api/compare", methods=["POST", "OPTIONS"])
+def compare_code():
+    """
+    Executes two algorithm implementations on equivalent input and compares operations,
+    runtime steps, output correctness, and asymptotic complexity.
+    """
+    if request.method == "OPTIONS":
+        return "", 204
+
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown")
+    if is_rate_limited(client_ip):
+        return jsonify({"error": "Rate limit exceeded. Please wait a moment before sending another request."}), 429
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Invalid request payload. Expected JSON object."}), 400
+
+    code_a = payload.get("code_a", "")
+    code_b = payload.get("code_b", "")
+    preset_a = payload.get("preset_a", "")
+    preset_b = payload.get("preset_b", "")
+    stdin_data = payload.get("stdin", "")
+    name_a = payload.get("name_a", "Implementation A")
+    name_b = payload.get("name_b", "Implementation B")
+
+    if preset_a and preset_a in ALGORITHM_PRESETS:
+        code_a = ALGORITHM_PRESETS[preset_a]["code"]
+        name_a = ALGORITHM_PRESETS[preset_a]["title"]
+    if preset_b and preset_b in ALGORITHM_PRESETS:
+        code_b = ALGORITHM_PRESETS[preset_b]["code"]
+        name_b = ALGORITHM_PRESETS[preset_b]["title"]
+
+    if not code_a or not code_b:
+        return jsonify({"error": "Both code_a and code_b (or valid preset_a/preset_b) are required."}), 400
+
+    if len(code_a) > MAX_CODE_CHARS or len(code_b) > MAX_CODE_CHARS:
+        return jsonify({"error": f"Code length exceeds maximum allowed limit of {MAX_CODE_CHARS} characters."}), 400
+
+    try:
+        comparison_res = compare_algorithms(code_a, code_b, stdin_data=stdin_data, name_a=name_a, name_b=name_b)
+        return jsonify(comparison_res), 200
+    except Exception as err:
+        return jsonify({"error": "Algorithm comparison failed.", "message": str(err)}), 500
+
+
+@app.route("/api/batch-test", methods=["POST", "OPTIONS"])
+def batch_test_code():
+    """
+    Executes code against a suite of custom test cases (inputs and expected outputs).
+    Returns structured pass/fail verdicts and execution step counts.
+    """
+    if request.method == "OPTIONS":
+        return "", 204
+
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown")
+    if is_rate_limited(client_ip):
+        return jsonify({"error": "Rate limit exceeded. Please wait a moment before sending another request."}), 429
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Invalid request payload. Expected JSON object."}), 400
+
+    code_str = payload.get("code", "")
+    test_cases = payload.get("test_cases", [])
+
+    if not code_str:
+        return jsonify({"error": "Field 'code' is required."}), 400
+
+    if not isinstance(test_cases, list) or len(test_cases) == 0:
+        return jsonify({"error": "Field 'test_cases' must be a non-empty array of test objects."}), 400
+
+    if len(test_cases) > 10:
+        return jsonify({"error": "Maximum limit of 10 test cases per batch exceeded."}), 400
+
+    if len(code_str) > MAX_CODE_CHARS:
+        return jsonify({"error": f"Code length exceeds maximum allowed limit of {MAX_CODE_CHARS} characters."}), 400
+
+    results = []
+    passed_count = 0
+
+    for idx, tc in enumerate(test_cases, 1):
+        tc_in = str(tc.get("input", ""))
+        tc_expected = str(tc.get("expected_output", "")).strip()
+
+        tracer = ExecutionTracer(max_steps=500, max_seconds=1.0)
+        tr = tracer.run_trace(code_str, stdin_data=tc_in)
+        actual_out = tr.get("stdout", "").strip()
+
+        passed = (actual_out == tc_expected) if tc_expected else (tr.get("status") == "completed")
+        if passed:
+            passed_count += 1
+
+        results.append({
+            "case_index": idx,
+            "input": tc_in,
+            "expected_output": tc_expected,
+            "actual_output": actual_out,
+            "passed": passed,
+            "status": tr.get("status", "unknown"),
+            "steps": tr.get("total_steps", 0)
+        })
+
+    return jsonify({
+        "total_cases": len(test_cases),
+        "passed_cases": passed_count,
+        "failed_cases": len(test_cases) - passed_count,
+        "results": results
+    }), 200
 
 
 @app.route("/", methods=["GET"])
